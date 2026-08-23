@@ -99,6 +99,14 @@ CREATE TABLE seats (
 
 Two rows are inserted in the **same transaction** as the game insert; both are deleted on any terminal transition. The primary key makes a bot in two games a constraint violation at the storage layer, which is where an invariant this important belongs.
 
+**Ordering and the failure path**, both verified against SQLite rather than assumed:
+
+- `PRAGMA foreign_keys = ON` forces `games` to be inserted **before** its two `seats` rows.
+- A `UNIQUE`/PK violation aborts only the **statement**, not the transaction. Left unhandled, that leaves an orphan `games` row and one stray seat committed.
+- Therefore **each pairing is wrapped in its own `SAVEPOINT`**. On violation, `ROLLBACK TO SAVEPOINT` discards the orphan game and the stray seat; the tick continues with the next pairing. Aborting the whole tick would discard every other valid pairing; catching and continuing without the savepoint would commit an orphan game.
+
+**A game is only reachable through `seats`.** Pool eligibility, delivery and the turn endpoint resolve a bot's current game by joining `seats`, never by scanning `games`. An orphan game row is therefore inert even if one were ever committed.
+
 **Game creation has exactly one creator: the ticker.** Challenges do not create games; they enqueue an intent that the ticker consumes (§12). This removes the second creation path entirely rather than trying to order two of them. A challenge whose seat is unavailable is rejected with `409` and prose explaining that the bot is already playing.
 
 ### 4.4 Storage-level backstops
@@ -196,9 +204,17 @@ Evaluated **first match wins**, top to bottom:
 Delivery writes the turn payload to the bot's mailbox (§8.4) under the lock, and:
 
 ```sql
-UPDATE games SET turn_started_mono=?, delivered_to_mover=1
- WHERE id=? AND ply=? AND delivered_to_mover=0
+UPDATE games
+   SET turn_started_mono = :now,
+       delivered_to_mover = 1,
+       status     = CASE WHEN status='pending' THEN 'active' ELSE status END,
+       started_at = CASE WHEN status='pending' THEN :now_wall ELSE started_at END
+ WHERE id = :id AND ply = :ply
+   AND delivered_to_mover = 0
+   AND status IN ('pending','active')
 ```
+
+**The `status` transition is part of this statement, not a separate one.** Revision 3 omitted it while keeping §4.2's `status='active'` CAS predicate on move submission — which would have failed every first move into a permanent 409/re-poll loop, with §6.3's grace unable to rescue the game because `delivered_to_mover` was already 1. First delivery is what moves a game from `pending` to `active` (§7); subsequent deliveries leave `status` untouched.
 
 The `delivered_to_mover=0` predicate is what makes re-delivery free. **Re-reading the position returns the identical payload and never touches the clock.** Without this guard a bot could re-poll while thinking and reset its own clock — the same exploit §8.3 closes for rejected moves.
 
@@ -218,6 +234,8 @@ This is the only thing standing between a closed laptop lid and two bots being d
 A bot polling normally takes delivery within milliseconds, so 15s never fires on a healthy client, including across the reconnect gap between two 20s holds.
 
 `AGENT_DELIVERY_GRACE_MS = 60000` applies while `controller='agent'`, since a human is in that loop.
+
+**Precedence against the clock.** A delivered position is governed by the clock, not by this rule: if the side to move has been delivered, only flag-fall (§6.4, detected by the ticker) can end the game for time. Abandonment applies **only** while `delivered_to_mover = 0`. The two can therefore never race, and a bot delivered a position with 500ms left flags at ~500ms rather than waiting 15s to be called abandoned.
 
 ### 6.4 Move accounting order
 
@@ -360,14 +378,14 @@ Input is an explicit snapshot so the function stays pure and seeded-testable:
 
 ```python
 PoolEntry = (bot_id, owner, rating, games_played, is_anchor,
-             last_color, white_count, last_opponent_id)
+             last_color, white_count, last_opponent_id, unpaired_ticks)
 ```
 
 Algorithm:
 
 1. Sort by `games_played` ascending, then `rating` ascending.
 2. Walk the sorted list pairing **adjacent** entries. Skip a candidate pair if same `owner`, or if it repeats `last_opponent_id`; try the next adjacent candidate instead.
-3. If a bot cannot be paired for **three consecutive ticks**, its same-owner and rematch constraints are dropped in that order. (Revision 2's "30s escape" referenced wall-clock time inside a pure function and was dead; tick count is passed in.)
+3. If a bot cannot be paired for **three consecutive ticks** (`unpaired_ticks >= 3`, carried in the snapshot so the function reads no clock and stays pure), its same-owner and rematch constraints are dropped in that order.
 4. **Colour precedence, explicit:** alternate from `last_color`. On conflict, the bot with the lower `white_count` takes White; if still tied, the lower `bot_id`.
 
 Sorting by `games_played` first means new bots play within seconds. Sorting by rating second gives near-neighbour pairings without the widening-window machinery cut in revision 2.
@@ -468,11 +486,12 @@ Errors are actionable prose. Mutating tools carry `destructiveHint`; read-only t
 
 `controller` is per-bot and set under `write_lock`.
 
-- **`take_control()` is refused while a `rated=1` game is in progress** (`409`, with prose). A human-paced agent inside a 3+2 rated game would flag it, corrupting a rated result — and §11 already routes agent play to unrated exhibitions. This removes the auto-release-mid-move hazard entirely.
+- **`take_control()` is refused whenever the bot holds a `seats` row** (`409`, with prose). Revision 3 predicated this on "a `rated=1` game in progress", which is not evaluable: `rated` can still be revised at termination by §5.1 rule 1, and "in progress" was undefined for `pending`. Seat-held is unambiguous, is the same predicate matchmaking uses, and covers `pending` and `active` alike.
+- **Game creation checks `controller`.** Both §9.1 pool eligibility and §12 challenge consumption require `controller='client'` for both bots, unless the game is an exhibition (§11). Without this, a rated 3+2 game could be created *for* an agent-controlled bot immediately after the refusal above had passed.
 - Taking control **does not alter `turn_started_mono`**. A bot cannot pause its own clock by switching controller.
 - `take_control()` wakes any held poll, which returns `{"game_id": null, "reason": "agent_has_control"}`. There is no window where the SDK still believes it may move.
 - While `controller='agent'`, delivery happens on `get_game()` / `get_legal_moves()` under the §6.2 guard, and `AGENT_DELIVERY_GRACE_MS` applies.
-- `last_agent_action_mono` is updated by every agent tool call. After 120s of inactivity the ticker sets `controller='client'` and wakes waiters. (Revision 2 specified auto-release with no column to measure it.)
+- `last_agent_action_mono` is updated by every agent tool call. After `AGENT_AUTO_RELEASE_MS = 45000` of inactivity the ticker sets `controller='client'` and wakes waiters. This must stay **below** `AGENT_DELIVERY_GRACE_MS` (60 000); revision 3 had release at 120s, so the delivery grace always fired first and auto-release was unreachable code.
 - The move endpoint checks `controller` **inside the same transaction as the CAS**, returning `403` on mismatch. Authorisation is not a pre-check.
 
 ---
@@ -488,13 +507,14 @@ Rated games render **green**, unrated/local **amber**. Nobody should mistake a p
 
 **SSE:**
 
-- The process has a **run id**, regenerated on every start. Event ids are `"{run_id}:{seq}"`, so a client cannot mistake a fresh run's `seq=1` for a resumed stream.
+- The process has a **run id**, regenerated on every start. Each event carries `{"run": "<run_id>", "seq": <integer>}`; `seq` is compared **numerically**. A single `"run:seq"` string would sort lexicographically, making `"r7:9" > "r7:10"` — exactly the ordering bug that silently drops events.
+- A client that sees a `run` different from its own refetches `/state` and discards its buffer.
 - `Last-Event-ID` resume is **not** implemented — with no event backlog it would be decorative. Clients connect to `/events` **first**, then fetch `/state`, then apply buffered events with `id > state.event_id`. Connect-then-snapshot; the reverse order drops events in the gap.
 - Per-client bounded queue (256), **drop-oldest**; a dropped client refetches `/state`. A stalled browser tab must never apply backpressure to the game loop.
 - Non-featured move events are coalesced to ≤2 Hz. Ten simultaneous games at blitz speed otherwise flood the stream with moves nobody is watching.
 - 15s heartbeat comments keep proxies from closing idle streams.
 - Payloads carry **no tokens and no owner identifiers** — bot id and name only.
-- Clock values plus `turn_started_mono` are included so the browser ticks locally; otherwise clocks appear frozen.
+- Clock values plus **`turn_elapsed_ms`, computed at emit time**, are included so the browser can tick locally. `turn_started_mono` is never sent: a monotonic counter is meaningless outside the emitting process and is a needless internal detail on the wire.
 
 ---
 
