@@ -5,6 +5,8 @@
 **Status:** Phases 1–2 cleared to build; phase 3 cleared subject to review round 3
 **Purpose:** A chess bot competition server for an agentic AI workshop (~20 attendees), doubling as a reference example of an agentic repository.
 
+**Companion document:** [2026-08-23-chess-arena-interfaces.md](2026-08-23-chess-arena-interfaces.md) pins the module boundaries this spec describes — `chess_core` signatures, the SSE event catalog, the bot/SDK surface, HTTP request/response models, MCP tool contracts, and test conventions. This spec says *what and why*; the interfaces document says *exactly what the seams look like*, so tracks can be built in parallel without inventing conflicting APIs. Where the two disagree, this spec wins and the interfaces document is corrected.
+
 ---
 
 ## 1. Goals

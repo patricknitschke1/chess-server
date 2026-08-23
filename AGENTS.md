@@ -16,6 +16,9 @@ When a decision trades cleverness against clarity, choose clarity. This code get
 Design is complete and has been through two rounds of adversarial systems-design review (`agent-reports/`). The spec is the source of truth:
 [docs/superpowers/specs/2026-08-23-chess-arena-design.md](docs/superpowers/specs/2026-08-23-chess-arena-design.md)
 
+Module boundaries — `chess_core` signatures, SSE events, bot/SDK surface, HTTP models, MCP tools, test layout — are pinned in
+[docs/superpowers/specs/2026-08-23-chess-arena-interfaces.md](docs/superpowers/specs/2026-08-23-chess-arena-interfaces.md). Bind to it rather than inventing a signature.
+
 §4 (concurrency), §6 (clock and delivery) and §7.1 (restart recovery) are normative and may not be relaxed for convenience. Build order is §20. Commands below describe the intended layout and will become real as phases land — do not assume a command works until the phase that creates it is done.
 
 ## Architecture
