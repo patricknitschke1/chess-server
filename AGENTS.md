@@ -13,10 +13,10 @@ When a decision trades cleverness against clarity, choose clarity. This code get
 
 ## Current state
 
-Design is complete and approved; implementation has not started. The spec is the source of truth:
+Design is complete and has been through one adversarial systems-design review. The spec is the source of truth:
 [docs/superpowers/specs/2026-08-23-chess-arena-design.md](docs/superpowers/specs/2026-08-23-chess-arena-design.md)
 
-Build order is §14 of the spec. Commands below describe the intended layout and will become real as phases land — do not assume a command works until the phase that creates it is done.
+§4 (concurrency) and §6 (clock) are normative and may not be relaxed for convenience. Build order is §19. Commands below describe the intended layout and will become real as phases land — do not assume a command works until the phase that creates it is done.
 
 ## Architecture
 
@@ -33,8 +33,11 @@ starter-kit/     What attendees clone. bot.py is the only file they edit.
 ## Non-negotiable invariants
 
 - **No untrusted code runs on the server.** Bots are client-side. The only exception is `chess_server/engine/reference_bots.py`, which we wrote.
-- **Every move submission carries its `ply`** and is applied compare-and-swap. Mismatch returns `409`. This is what makes double-moves impossible.
-- **Bot tokens are stored hashed and never logged.** Not in errors, not in debug output.
+- **Every game-state transition is compare-and-swap** — moves, flags, finalisation, abort — as a conditional `UPDATE ... WHERE status=? AND ply=?` with `rowcount` asserted. Not just move submission. This is what makes double-finalisation impossible.
+- **All game mutation happens under the single `store.write_lock`.** Ticker and handlers both. Reads that inform writes go inside it.
+- **Elapsed time is `time.monotonic_ns()`, never wall clock.** A laptop suspend must not flag the board.
+- **A clock starts on delivery, not on pairing.** A bot is never charged for time before it has seen the position.
+- **Bot tokens are stored hashed and never logged.** Not in errors, not in debug output, not in SSE payloads.
 - **`chess_core` stays pure.** If you need the time, pass it in. This is what keeps ELO and matchmaking testable.
 - **Errors aimed at attendees are actionable prose**, not bare status codes. `"No bot registered for this token. Call register_bot first."`
 - **The local arena randomises openings.** Two deterministic bots otherwise replay one identical game, and "100 games" becomes a statistical illusion.
