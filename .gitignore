@@ -1,0 +1,14 @@
+# Brainstorming companion output
+.superpowers/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+
+# Local state
+*.db
+*.sqlite3
+.env
