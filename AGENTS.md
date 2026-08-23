@@ -65,6 +65,24 @@ Extract a new skill when a pattern has recurred, not in anticipation of it.
 
 Subagent reports go in `agent-reports/` — see [agent-reports/README.md](agent-reports/README.md) for naming and conventions.
 
+## How this project is built
+
+The goal is to **distil the specification according to each agent's responsibility**. From the two design documents we fan out subagents to write one role spec per track, each scoped to what that role must build.
+
+The orchestrator acts as a **senior systems-design manager**: it does not write the role specs itself, but it is accountable for the whole. Its job is to ensure no functionality is lost in the split, that each role spec is complete enough for its owner to build from without guessing, and that the seams between roles still meet.
+
+Sequence:
+
+1. **Design spec** — what and why. Reviewed adversarially until findings stop being structural.
+2. **Interfaces** — the seams pinned precisely, so tracks cannot invent conflicting APIs.
+3. **Role specs** — one per agent in `docs/superpowers/specs/roles/`, distilled from the two documents above. This is the prerequisite for any implementation plan.
+4. **Implementation plans** — written per track, against the role spec.
+5. **Build** — each track owned by exactly one agent.
+
+**The full chess arena must be verifiable through the specs.** If a behaviour exists only in someone's head, it does not exist. A role spec that omits something means that thing does not get built.
+
+The orchestrator's checks at step 3: every §-level requirement in the design spec is claimed by exactly one role; every interface in the interfaces document has both a producer and a consumer; and no role spec contradicts another at a seam.
+
 ## Working here
 
 - Read the spec section for the area you are touching before changing it.

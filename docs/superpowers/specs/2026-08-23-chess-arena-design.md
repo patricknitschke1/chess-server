@@ -596,12 +596,15 @@ The arena runs the same clock code as the server, so a bot that flags locally fl
 |---|---|---|
 | `chess-domain-engineer` | python-chess, clock semantics, Elo, adjudication | `chess_core/`, strict TDD |
 | `server-engineer` | FastAPI, SQLite, async, long-polling, auth, CAS, concurrency | `store/`, `engine/`, `api/` |
+| `client-engineer` | SDK design for novices, CLI ergonomics, offline tooling | `starter-kit/chess_client/`, `bot.py`, `arena.py` |
 | `mcp-engineer` | MCP spec, FastMCP, tool-description ergonomics | `mcp/` |
 | `dashboard-engineer` | HTML/CSS/JS, SSE, board rendering, visual design | `web/` |
 | `workshop-author` | Pedagogy, Claude customization formats, writing for novices | `AGENTS.md`, skills, starter-kit docs |
-| `spec-reviewer` | Diffs vs spec; security, simplicity, YAGNI | Read-only, everything |
+| `spec-reviewer` | Diffs vs spec; security, simplicity, YAGNI | Read-only, everything; owns nothing |
 
-`mcp-engineer` and `server-engineer` are not redundant: one designs for HTTP clients, the other for a language model. `chess-domain-engineer` is isolated because it is the only place where being wrong is *silent*.
+Each build agent maps 1:1 onto a parallel track, and each track has exactly one owner. `spec-reviewer` is deliberately not a track — it reviews the other six, which requires that it wrote none of them.
+
+`mcp-engineer` and `server-engineer` are not redundant: one designs for HTTP clients, the other for a language model. `chess-domain-engineer` is isolated because it is the only place where being wrong is *silent*. `client-engineer` exists because the SDK, `bot.py` and `arena.py` are the only code twenty attendees actually read and modify — designing an API a novice cannot misuse is a distinct skill from server internals, and splitting that surface across three owners is the tangle the roster exists to prevent.
 
 **Attendee-facing skills** (`starter-kit/.claude/skills/`)
 
