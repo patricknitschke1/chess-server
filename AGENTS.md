@@ -55,6 +55,8 @@ The split is deliberate and is itself workshop content:
 
 Extract a new skill when a pattern has recurred, not in anticipation of it.
 
+Subagent reports go in `agent-reports/` — see [agent-reports/README.md](agent-reports/README.md) for naming and conventions.
+
 ## Working here
 
 - Read the spec section for the area you are touching before changing it.
