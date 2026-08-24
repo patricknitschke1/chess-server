@@ -203,33 +203,64 @@ def test_arena_runs_single_game():
     assert result.black_time_ms >= 0
 
 
-def test_arena_clock_matches_chess_core():
-    """Arena clock simulation matches chess_core behavior."""
-    from arena import run_single_game
+def test_arena_clock_matches_chess_core(monkeypatch):
+    """Each side's remaining time is exactly start - time spent + increments.
+
+    The expectation is written out in longhand rather than obtained from
+    chess_core.clock, because a test whose oracle is the code under test cannot
+    fail when that code is wrong.
+
+    The two bots think for deliberately different lengths, so this pins the side
+    as well as the amount. It fails if the deduction is dropped, if the clock is
+    never advanced, if the increment lands twice on one side, or if the thinking
+    time is charged to the opponent. The old version asserted only an upper
+    bound, which a clock that deducted nothing satisfied more easily than a
+    correct one — while its name promised the §17 guarantee that a bot which
+    flags locally flags live.
+    """
+    import time as _time
+    import arena
     from chess_core import RATED_TIME_CONTROL_NS, RATED_INCREMENT_NS, ns_to_ms
-    
-    # Run game and check time accounting is reasonable
-    result = run_single_game(
-        white_bot=ref_random_choose_move,
-        black_bot=ref_random_choose_move,
-        white_name="random1",
-        black_name="random2",
-        time_control_ns=RATED_TIME_CONTROL_NS,
-        increment_ns=RATED_INCREMENT_NS,
-        opening_fen=None,
-        verbose=False
+
+    monkeypatch.setattr(arena, "PLY_CAP", 8)
+
+    def make_bot(think_seconds):
+        def bot(board, clock):
+            _time.sleep(think_seconds)
+            return next(iter(board.legal_moves))
+        return bot
+
+    result = arena.run_single_game(
+        make_bot(0.060), make_bot(0.010), "slow_white", "fast_black",
+        RATED_TIME_CONTROL_NS, RATED_INCREMENT_NS,
     )
-    
+
+    assert result.ply_count == 8
     starting_ms = ns_to_ms(RATED_TIME_CONTROL_NS)
     increment_ms = ns_to_ms(RATED_INCREMENT_NS)
-    
-    # With PLY_CAP=200, each side makes at most 100 moves, gaining 100*increment
-    # Maximum possible time: starting + 100*increment (if all moves are instant)
-    max_possible_ms = starting_ms + 100 * increment_ms
-    
-    # Time should be at most starting + all increments
-    assert result.white_time_ms <= max_possible_ms + 1000  # +1s tolerance for rounding
-    assert result.black_time_ms <= max_possible_ms + 1000
+
+    # Sub-millisecond bookkeeping between delivery and the first instruction of
+    # the bot rounds down; measured drift is 1-3ms across a whole game.
+    tolerance_ms = 20
+
+    for side, spent_per_move, reported_ms in (
+        ("white", result.white_move_times, result.white_time_ms),
+        ("black", result.black_move_times, result.black_time_ms),
+    ):
+        assert len(spent_per_move) == 4, f"{side} did not move four times"
+        expected_ms = starting_ms
+        for spent_ms in spent_per_move:
+            expected_ms += increment_ms - spent_ms
+
+        assert abs(reported_ms - expected_ms) <= tolerance_ms, (
+            f"{side} clock read {reported_ms}ms; "
+            f"{starting_ms}ms minus {spent_per_move} plus 4x{increment_ms}ms "
+            f"increment is {expected_ms}ms"
+        )
+
+    assert result.white_time_ms < result.black_time_ms, (
+        "the slower bot finished with more time than the faster one"
+    )
 
 
 def test_arena_detects_flags():
