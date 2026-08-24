@@ -334,3 +334,81 @@ def test_every_opening_has_white_to_move():
         board = chess.Board(fen)
         assert board.turn == chess.WHITE, f"{fen} does not have White to move"
         assert not board.is_game_over()
+
+
+def test_arena_cli_parsing():
+    """Arena parses command-line arguments correctly."""
+    from arena import parse_args
+
+    args = parse_args([
+        '--bots', 'bot1.py', 'bot2.py',
+        '--games', '50',
+        '--seed', '42',
+        '--pgn', 'output.pgn',
+    ])
+
+    assert args.bots == ['bot1.py', 'bot2.py']
+    assert args.games == 50
+    assert args.seed == 42
+    assert args.pgn == 'output.pgn'
+    assert args.verbose is False
+
+
+def test_arena_cli_defaults():
+    """Arena provides sensible defaults."""
+    from arena import parse_args
+    from chess_core import ns_to_ms, RATED_TIME_CONTROL_NS, RATED_INCREMENT_NS
+
+    args = parse_args(['--bots', 'bot.py'])
+
+    assert args.games == 100
+    assert args.seed is not None
+    assert args.time_control_ms == ns_to_ms(RATED_TIME_CONTROL_NS)
+    assert args.increment_ms == ns_to_ms(RATED_INCREMENT_NS)
+
+
+def test_arena_schedule_alternates_colours():
+    """Every bot in a pairing plays both colours; openings are all White to move,
+    so a fixed assignment would measure colour rather than skill."""
+    from arena import build_schedule
+
+    schedule = build_schedule(['a', 'b'], 2)
+
+    whites = [white for white, _ in schedule]
+    blacks = [black for _, black in schedule]
+    for name in ('a', 'b'):
+        assert name in whites, f"{name} never played White"
+        assert name in blacks, f"{name} never played Black"
+
+
+def test_arena_schedule_alternates_colours_in_every_pairing():
+    """Colour alternation holds for each pairing of a 3-bot round robin."""
+    from arena import build_schedule
+
+    schedule = build_schedule(['a', 'b', 'c'], 12)
+
+    for pair in (frozenset({'a', 'b'}), frozenset({'a', 'c'}), frozenset({'b', 'c'})):
+        games = [g for g in schedule if frozenset(g) == pair]
+        assert len(games) == 4
+        whites = {white for white, _ in games}
+        assert whites == set(pair), f"{pair} did not swap colours"
+
+
+def test_arena_schedule_plays_exact_game_count():
+    """--games is the total played, not the count per pairing."""
+    from arena import build_schedule
+
+    assert len(build_schedule(['a', 'b'], 100)) == 100
+    assert len(build_schedule(['a', 'b', 'c'], 100)) == 100
+    assert len(build_schedule(['a', 'b', 'c', 'd'], 7)) == 7
+
+
+def test_arena_schedule_spreads_remainder_evenly():
+    """The odd games out land on distinct pairings, not all on one."""
+    from arena import build_schedule
+
+    schedule = build_schedule(['a', 'b', 'c'], 100)
+
+    counts = [len([g for g in schedule if frozenset(g) == pair])
+              for pair in (frozenset({'a', 'b'}), frozenset({'a', 'c'}), frozenset({'b', 'c'}))]
+    assert max(counts) - min(counts) <= 1

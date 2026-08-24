@@ -3,10 +3,15 @@
 Runs round-robin tournaments between bots using chess_core for all game logic.
 Provides diagnostics (time per move, flags, illegal moves) critical for debugging.
 """
-import time
+import argparse
+import importlib.util
+import random
 import statistics
+import sys
+import time
+from pathlib import Path
 import chess
-from typing import Callable, Optional, List, Dict
+from typing import Callable, Optional, List, Dict, Tuple
 from dataclasses import dataclass
 from chess_client import ClockView
 
@@ -21,6 +26,8 @@ from chess_core import (
     account_move_and_switch,
     ms_to_ns,
     ns_to_ms,
+    RATED_TIME_CONTROL_NS,
+    RATED_INCREMENT_NS,
     Color,
     TerminationReason,
     STARTING_RATING,
@@ -400,3 +407,263 @@ class ArenaTracker:
             'flags': self.flags.get(name, 0),
             'illegal_attempts': self.illegal_attempts.get(name, 0)
         }
+
+
+_load_counter = 0
+
+
+def load_bot_module(path_str: str):
+    """Load a bot module from a file path."""
+    global _load_counter
+
+    path = Path(path_str)
+    if not path.exists():
+        print(f"Error: Bot file not found: {path_str}")
+        sys.exit(1)
+
+    # Two bots may share a filename in different directories; keying sys.modules by
+    # stem alone would silently hand back the first one for both.
+    _load_counter += 1
+    module_key = f"arena_bot_{_load_counter}_{path.stem}"
+
+    spec = importlib.util.spec_from_file_location(module_key, path)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[module_key] = module
+    spec.loader.exec_module(module)
+
+    if not hasattr(module, 'choose_move'):
+        print(f"Error: {path_str} must define choose_move(board, clock) function")
+        sys.exit(1)
+
+    return module
+
+
+def build_schedule(bot_names: List[str], total_games: int) -> List[Tuple[str, str]]:
+    """Build the (white, black) order for a round-robin of exactly total_games.
+
+    Colours alternate within each pairing: every opening has White to move, so a
+    fixed assignment would rate colour rather than skill. Games that do not divide
+    evenly across pairings go to the earliest pairings, so the total is exact.
+    """
+    pairings = [
+        (bot_names[i], bot_names[j])
+        for i in range(len(bot_names))
+        for j in range(i + 1, len(bot_names))
+    ]
+    if not pairings:
+        return []
+
+    base, remainder = divmod(total_games, len(pairings))
+
+    schedule: List[Tuple[str, str]] = []
+    for index, (first, second) in enumerate(pairings):
+        count = base + (1 if index < remainder else 0)
+        for game in range(count):
+            schedule.append((first, second) if game % 2 == 0 else (second, first))
+    return schedule
+
+
+def parse_args(argv=None):
+    """Parse command-line arguments."""
+    parser = argparse.ArgumentParser(
+        prog='arena.py',
+        description="Local chess arena for offline bot testing",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Run 100 games between two bots
+  python arena.py --bots bot.py ref_bots/ref_greedy.py --games 100 --seed 7
+
+  # Include reference bots
+  python arena.py --bots bot.py ref_bots/ref_random.py ref_bots/ref_greedy.py --games 60
+
+  # Custom time control
+  python arena.py --bots bot.py ref_bots/ref_greedy.py --time-control 60000 --increment 1000
+
+  # Export PGNs
+  python arena.py --bots bot.py ref_bots/ref_greedy.py --pgn games.pgn
+
+  # Replay a specific game
+  python arena.py --replay 5 --pgn games.pgn
+        """
+    )
+
+    parser.add_argument(
+        '--bots',
+        nargs='+',
+        help='Bot module paths (e.g. bot.py ref_bots/ref_random.py)'
+    )
+    parser.add_argument(
+        '--games',
+        type=int,
+        default=100,
+        help='Total number of games to play across all pairings (default: 100)'
+    )
+    parser.add_argument(
+        '--seed',
+        type=int,
+        default=None,
+        help='Random seed for reproducibility (default: random)'
+    )
+    parser.add_argument(
+        '--time-control',
+        dest='time_control_ms',
+        type=int,
+        default=ns_to_ms(RATED_TIME_CONTROL_NS),
+        help=f'Time control in milliseconds (default: {ns_to_ms(RATED_TIME_CONTROL_NS)})'
+    )
+    parser.add_argument(
+        '--increment',
+        dest='increment_ms',
+        type=int,
+        default=ns_to_ms(RATED_INCREMENT_NS),
+        help=f'Increment in milliseconds (default: {ns_to_ms(RATED_INCREMENT_NS)})'
+    )
+    parser.add_argument(
+        '--pgn',
+        help='Export games to this PGN file'
+    )
+    parser.add_argument(
+        '--replay',
+        type=int,
+        metavar='N',
+        help='Replay game number N from the PGN file given by --pgn'
+    )
+    parser.add_argument(
+        '--verbose',
+        action='store_true',
+        help='Print move-by-move output'
+    )
+
+    args = parser.parse_args(argv)
+
+    if args.seed is None:
+        args.seed = random.randint(0, 2**31 - 1)
+
+    if args.replay is not None:
+        if not args.pgn:
+            parser.error(
+                'Replaying a game needs the file to read it from. '
+                'Add --pgn games.pgn to your command.'
+            )
+        if args.replay < 1:
+            parser.error(
+                f'Games are numbered from 1, so --replay {args.replay} cannot exist. '
+                'Use --replay 1 for the first game in the file.'
+            )
+    elif not args.bots:
+        parser.error(
+            'No bots given. Add --bots bot.py ref_bots/ref_greedy.py to play some games, '
+            'or --replay N --pgn games.pgn to watch one back.'
+        )
+
+    return args
+
+
+def print_results(tracker: 'ArenaTracker', bot_names: List[str], seed: int, total_games: int):
+    """Print the formatted results table."""
+    print(f"\nLocal Arena Results ({total_games} games, seed={seed})")
+    print("=" * 88)
+    print()
+
+    sorted_names = sorted(bot_names, key=lambda n: tracker.get_rating(n), reverse=True)
+
+    print(
+        f"{'Bot':<20} {'Rating':>6} {'W':>3} {'L':>3} {'D':>3} {'Games':>5} "
+        f"{'Avg(ms)':>8} {'P95(ms)':>8} {'Flags':>5} {'Illegal':>7}"
+    )
+    print("-" * 88)
+
+    for name in sorted_names:
+        stats = tracker.get_stats(name)
+        print(
+            f"{name:<20} {stats['rating']:>6} "
+            f"{stats['wins']:>3} {stats['losses']:>3} {stats['draws']:>3} "
+            f"{stats['games_played']:>5} "
+            f"{stats['mean_move_ms']:>8.0f} {stats['p95_move_ms']:>8.0f} "
+            f"{stats['flags']:>5} {stats['illegal_attempts']:>7}"
+        )
+
+    print()
+    flagged = [n for n in sorted_names if tracker.get_stats(n)['flags'] > 0]
+    if flagged:
+        for name in flagged:
+            stats = tracker.get_stats(name)
+            print(
+                f"{name} ran out of time in {stats['flags']} game(s), "
+                f"averaging {stats['mean_move_ms']:.0f}ms per move "
+                f"({stats['p95_move_ms']:.0f}ms at p95). "
+                f"Try reducing search depth in bot.py."
+            )
+        print()
+
+
+def main(argv=None):
+    """Main entry point for the arena."""
+    args = parse_args(argv)
+
+    if args.replay is not None:
+        print("Replay is not implemented yet.")
+        return
+
+    if len(args.bots) < 2:
+        print(
+            "Error: an arena needs at least two bots to pair up. Try adding a "
+            "reference opponent: --bots bot.py ref_bots/ref_greedy.py",
+            file=sys.stderr,
+        )
+        sys.exit(2)
+
+    print(f"Loading {len(args.bots)} bots...")
+    bot_moves: Dict[str, Callable] = {}
+    for bot_path in args.bots:
+        module = load_bot_module(bot_path)
+        bot_name = Path(bot_path).stem
+        bot_moves[bot_name] = module.choose_move
+        print(f"  loaded {bot_name}")
+
+    tracker = ArenaTracker()
+    bot_names = list(bot_moves.keys())
+    for name in bot_names:
+        tracker.register_bot(name)
+
+    # Openings take the explicit generator; reference bots reach for the global
+    # `random` module, so both need seeding for a run to be reproducible.
+    rng = random.Random(args.seed)
+    random.seed(args.seed)
+
+    from opening_book import select_opening
+
+    schedule = build_schedule(bot_names, args.games)
+    print(f"\nRunning {len(schedule)} games (seed={args.seed})...")
+
+    all_results: List[GameResult] = []
+    for game_number, (white_name, black_name) in enumerate(schedule, start=1):
+        result = run_single_game(
+            white_bot=bot_moves[white_name],
+            black_bot=bot_moves[black_name],
+            white_name=white_name,
+            black_name=black_name,
+            time_control_ns=ms_to_ns(args.time_control_ms),
+            increment_ns=ms_to_ns(args.increment_ms),
+            opening_fen=select_opening(rng),
+            verbose=args.verbose,
+        )
+        all_results.append(result)
+
+        tracker.record_game(white_name, black_name, result.result)
+        tracker.record_move_times(white_name, result.white_move_times)
+        tracker.record_move_times(black_name, result.black_move_times)
+        tracker.record_flags(white_name, result.white_flags)
+        tracker.record_flags(black_name, result.black_flags)
+        tracker.record_illegal_attempts(white_name, result.white_illegal_attempts)
+        tracker.record_illegal_attempts(black_name, result.black_illegal_attempts)
+
+        if game_number % 10 == 0:
+            print(f"  {game_number}/{len(schedule)} games complete...")
+
+    print_results(tracker, bot_names, args.seed, len(all_results))
+
+
+if __name__ == '__main__':
+    main()
