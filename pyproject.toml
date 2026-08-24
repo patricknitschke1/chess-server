@@ -11,6 +11,7 @@ dependencies = [
 dev = [
     "pytest>=7.4",
     "pytest-cov>=4.1",
+    "pytest-asyncio>=0.23",
 ]
 
 [build-system]
@@ -18,10 +19,11 @@ requires = ["setuptools>=68.0"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
-include = ["chess_core*"]
+include = ["chess_core*", "chess_server*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests", "starter-kit/tests"]
 python_files = ["test_*.py"]
 python_functions = ["test_*"]
 addopts = "--strict-markers"
+asyncio_mode = "auto"
