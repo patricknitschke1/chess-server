@@ -10,6 +10,7 @@ from typing import AsyncIterator, Awaitable, Callable, Optional, Sequence
 from chess_core import (
     AGENT_DELIVERY_GRACE_NS,
     DELIVERY_GRACE_NS,
+    EXHIBITION_TIME_CONTROL_NS,
     RATED_INCREMENT_NS,
     RATED_TIME_CONTROL_NS,
     TICK_INTERVAL_NS,
@@ -17,6 +18,8 @@ from chess_core import (
     check_delivery_timeout,
     has_flagged,
     elapsed_ms,
+    ms_to_ns,
+    ns_to_ms,
     pair_bots,
 )
 
@@ -30,8 +33,16 @@ from chess_server.engine.games import (
 )
 from chess_server.engine.pool import offer_anchors, snapshot_pool
 from chess_server.engine.runner import _mover_id
+from chess_server.engine.wall import utc_now_iso
 from chess_server.store.cas import CASConflict
-from chess_server.store.repositories import BotRepo, GameRepo, _clock_from_game
+from chess_server.store.repositories import (
+    BotRepo,
+    ChallengeRepo,
+    GameRepo,
+    SeatRepo,
+    _clock_from_game,
+)
+from chess_server.store.rows import ChallengeRow
 from chess_server.store.txn import Txn, critical_section
 
 logger = logging.getLogger(__name__)
@@ -72,7 +83,76 @@ async def _unit(txn: Txn, name: str) -> AsyncIterator[None]:
         logger.info("unit %s rolled back: %s", name, exc)
 
 
-STEPS: list[Step] = []
+EXHIBITION_TIME_CONTROL_MS = ns_to_ms(EXHIBITION_TIME_CONTROL_NS)
+
+
+async def _challenge_event(txn: Txn, challenge: ChallengeRow) -> dict:
+    bots = BotRepo(txn.conn, txn.executor)
+    challenger = await bots.get_by_id(challenge.challenger_bot_id)
+    opponent = await bots.get_by_id(challenge.opponent_bot_id)
+    return {
+        "challenge_id": challenge.id,
+        "status": challenge.status,
+        "challenger_bot_id": challenger.id,
+        "challenger_bot_name": challenger.name,
+        "opponent_bot_id": opponent.id,
+        "opponent_bot_name": opponent.name,
+        "time_control_ms": challenge.time_control_ms,
+        "increment_ms": challenge.increment_ms,
+        "game_id": challenge.game_id,
+        "reason": challenge.reason,
+    }
+
+
+async def step_challenges(deps: EngineDeps, txn: Txn, now_mono: int) -> None:
+    """Role spec §7.2 (challenge half). Consumed before pairing, so an accepted
+    challenge always beats matchmaking to the seat."""
+    challenges = ChallengeRepo(txn.conn, txn.executor)
+    bots = BotRepo(txn.conn, txn.executor)
+    seats = SeatRepo(txn.conn, txn.executor)
+
+    for challenge in await challenges.list_queued():
+        async with _unit(txn, f"challenge_{challenge.id}"):
+            exhibition = challenge.time_control_ms == EXHIBITION_TIME_CONTROL_MS
+            # The challenger takes White; design §12 does not pin the colours.
+            participants = [
+                await bots.get_by_id(challenge.challenger_bot_id),
+                await bots.get_by_id(challenge.opponent_bot_id),
+            ]
+            free = True
+            for bot in participants:
+                seated = await seats.get_seat(bot.id) is not None
+                # Design §13.3: an agent may only be handed the controls in an
+                # exhibition game.
+                if seated or not (exhibition or bot.controller == "client"):
+                    free = False
+            if not free:
+                await challenges.cas_set_status(
+                    challenge.id, challenge.status, "expired",
+                    reason="seat_unavailable", resolved_at=utc_now_iso(),
+                )
+                txn.emit(
+                    "challenge_updated",
+                    await _challenge_event(txn, await challenges.get_by_id(challenge.id)),
+                )
+                continue
+
+            game_id = await create_game_locked(
+                deps, txn, participants[0], participants[1],
+                time_control_ns=ms_to_ns(challenge.time_control_ms),
+                increment_ns=ms_to_ns(challenge.increment_ms),
+                source="challenge",
+                now_mono=now_mono,
+            )
+            await challenges.cas_set_status(
+                challenge.id, challenge.status, "consumed",
+                resolved_at=utc_now_iso(), game_id=game_id,
+            )
+            txn.emit(
+                "challenge_updated",
+                await _challenge_event(txn, await challenges.get_by_id(challenge.id)),
+            )
+
 
 
 async def step_matchmaking(deps: EngineDeps, txn: Txn, now_mono: int) -> None:
@@ -157,6 +237,16 @@ async def step_flag(deps: EngineDeps, txn: Txn, now_mono: int) -> None:
                 await finalise_game_locked(
                     deps, txn, game, opposite_win(game.to_move), TerminationReason.FLAG
                 )
+
+
+# Role spec §7: the order is a production fact, not a test argument. Consumption
+# precedes pairing so an accepted challenge always beats matchmaking to the seat.
+STEPS: list[Step] = [
+    step_challenges,
+    step_matchmaking,
+    step_delivery_grace,
+    step_flag,
+]
 
 
 async def _tick_once(
