@@ -1,0 +1,10 @@
+{
+	"hooks": {
+		"Stop": [
+			{
+				"type": "command",
+				"command": "Continue autopilot. You may continue and any enquiries may be stored into a separate file for later review by me. Continue with your tasks."
+			}
+		]
+	}
+}
