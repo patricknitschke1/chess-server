@@ -14,6 +14,7 @@ from chess_core import (
     ns_to_ms,
 )
 
+from chess_server.store.cas import assert_cas
 from chess_server.store.rows import BotRow, GameRow, from_row
 
 NON_TERMINAL = ("pending", "active")
@@ -286,6 +287,69 @@ class GameRepo(_Repo):
             _SUMMARY_SELECT + " WHERE g.status IN (?, ?) ORDER BY g.id", NON_TERMINAL
         )
         return [dict(row) for row in rows]
+
+    async def cas_terminate(
+        self,
+        game_id: int,
+        from_status: str,
+        from_ply: int,
+        status: str,
+        result: Optional[str],
+        termination: str,
+        ended_at: str,
+        rated: Optional[int] = None,
+    ) -> None:
+        """Clearing delivery here keeps a terminal game out of the sweep (§3.10)."""
+        cursor = await self._write(
+            "UPDATE games"
+            "   SET status = ?, result = ?, termination = ?, ended_at = ?,"
+            "       rated = COALESCE(?, rated),"
+            "       delivered_to_mover = 0, turn_started_mono = NULL"
+            " WHERE id = ? AND status = ? AND ply = ?",
+            (status, result, termination, ended_at, rated, game_id, from_status, from_ply),
+        )
+        assert_cas(cursor)
+
+    async def cas_apply_move(
+        self, game_id: int, from_ply: int, from_status: str, fen_after: str, clock: ClockState
+    ) -> None:
+        fields = _clock_to_game_fields(clock)
+        cursor = await self._write(
+            "UPDATE games"
+            "   SET fen = ?, ply = ply + 1, to_move = ?, white_ms = ?, black_ms = ?,"
+            "       to_move_since_mono = ?, turn_started_mono = ?, delivered_to_mover = ?"
+            " WHERE id = ? AND ply = ? AND status = ?",
+            (
+                fen_after,
+                to_move_from_fen(fen_after),   # the FEN is authoritative, not the clock
+                fields["white_ms"],
+                fields["black_ms"],
+                fields["to_move_since_mono"],
+                fields["turn_started_mono"],
+                fields["delivered_to_mover"],
+                game_id,
+                from_ply,
+                from_status,
+            ),
+        )
+        assert_cas(cursor)
+
+    async def cas_deliver(
+        self, game_id: int, ply: int, now_mono: int, now_wall: str
+    ) -> tuple[bool, bool]:
+        """§5.2. rowcount 0 means already delivered, which is free by design, not a
+        conflict — so this is the one transition that never calls assert_cas."""
+        before = await self._one("SELECT status FROM games WHERE id = ?", (game_id,))
+        cursor = await self._write(
+            "UPDATE games"
+            "   SET turn_started_mono = ?, delivered_to_mover = 1,"
+            "       status = CASE WHEN status = 'pending' THEN 'active' ELSE status END,"
+            "       started_at = CASE WHEN status = 'pending' THEN ? ELSE started_at END"
+            " WHERE id = ? AND ply = ? AND delivered_to_mover = 0 AND status IN (?, ?)",
+            (now_mono, now_wall, game_id, ply, *NON_TERMINAL),
+        )
+        delivered = cursor.rowcount == 1
+        return delivered, delivered and before["status"] == "pending"
 
 
 class SeatRepo(_Repo):
