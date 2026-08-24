@@ -7,6 +7,8 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from typing import AsyncIterator, Awaitable, Callable, Optional, Sequence
 
+import chess
+
 from chess_core import (
     AGENT_DELIVERY_GRACE_NS,
     DELIVERY_GRACE_NS,
@@ -14,6 +16,8 @@ from chess_core import (
     RATED_INCREMENT_NS,
     RATED_TIME_CONTROL_NS,
     TICK_INTERVAL_NS,
+    ClockView,
+    Color,
     TerminationReason,
     check_delivery_timeout,
     has_flagged,
@@ -32,7 +36,8 @@ from chess_server.engine.games import (
     opposite_win,
 )
 from chess_server.engine.pool import offer_anchors, snapshot_pool
-from chess_server.engine.runner import _mover_id
+from chess_server.engine.reference_bots import bot_for
+from chess_server.engine.runner import _mover_id, apply_move_locked, deliver_position_locked
 from chess_server.engine.wall import utc_now_iso
 from chess_server.store.cas import CASConflict
 from chess_server.store.repositories import (
@@ -42,7 +47,7 @@ from chess_server.store.repositories import (
     SeatRepo,
     _clock_from_game,
 )
-from chess_server.store.rows import ChallengeRow
+from chess_server.store.rows import ChallengeRow, GameRow
 from chess_server.store.txn import Txn, critical_section
 
 logger = logging.getLogger(__name__)
@@ -53,6 +58,10 @@ TICK_INTERVAL_SECONDS = TICK_INTERVAL_NS / 1e9
 Step = Callable[[EngineDeps, Txn, int], Awaitable[None]]
 
 _SAFE_SAVEPOINT = re.compile(r"\A[A-Za-z][A-Za-z0-9_]*\Z")
+
+
+class AnchorMoveFailed(Exception):
+    """Our own code failed, not an attendee's. Rolls back one unit, never the tick."""
 
 
 @dataclass
@@ -79,7 +88,7 @@ async def _unit(txn: Txn, name: str) -> AsyncIterator[None]:
     try:
         async with txn.savepoint(name):
             yield
-    except (CASConflict, sqlite3.IntegrityError) as exc:
+    except (CASConflict, sqlite3.IntegrityError, AnchorMoveFailed) as exc:
         logger.info("unit %s rolled back: %s", name, exc)
 
 
@@ -202,6 +211,51 @@ def _record_pairing_outcome(seated: set[int], idle: list[int]) -> None:
         state.unpaired_ticks[bot_id] = state.unpaired_ticks.get(bot_id, 0) + 1
 
 
+def _clock_view(game: GameRow) -> ClockView:
+    """`my_ms` is always the mover's, which is what removes colour-indexing as a
+    class of bug for every bot, ours included."""
+    mine, theirs = (
+        (game.white_ms, game.black_ms)
+        if game.to_move == Color.WHITE.value
+        else (game.black_ms, game.white_ms)
+    )
+    return ClockView(
+        my_ms=mine, opponent_ms=theirs, increment_ms=game.increment_ms, ply=game.ply
+    )
+
+
+async def step_anchor_moves(deps: EngineDeps, txn: Txn, now_mono: int) -> None:
+    """Role spec §7.3. An anchor has no HTTP client, so the in-process call is
+    itself the delivery — nothing else will ever deliver to it or move for it."""
+    games = GameRepo(txn.conn, txn.executor)
+    bots = BotRepo(txn.conn, txn.executor)
+    for game in await games.list_anchor_to_move():
+        async with _unit(txn, f"anchor_{game.id}"):
+            mover = await bots.get_by_id(_mover_id(game))
+            player = bot_for(mover.name)
+            if player is None:
+                logger.error("no reference bot named %r for game %d", mover.name, game.id)
+                continue
+            # Starts the clock and moves pending -> active. Inside the unit, so a
+            # failure below un-delivers and step 4 abandons rather than wedging.
+            await deliver_position_locked(deps, txn, game, now_mono)
+            game = await games.get_by_id(game.id)
+            try:
+                move = player.choose_move(chess.Board(game.fen), _clock_view(game))
+            except Exception as exc:
+                logger.exception(
+                    "anchor %s failed in game %d at fen %s", mover.name, game.id, game.fen
+                )
+                raise AnchorMoveFailed(f"{mover.name} in game {game.id}") from exc
+            # The same locked path a client's move takes: the anchor is charged
+            # real time, and there is no second move implementation to drift.
+            await apply_move_locked(
+                deps, txn, game.id, game.ply, move.uci(),
+                client_reported_ms=None,
+                now_mono=deps.now_mono(),
+            )
+
+
 
 async def step_delivery_grace(deps: EngineDeps, txn: Txn, now_mono: int) -> None:
     """Role spec §7.4. `list_undelivered_non_terminal` carries the status filter;
@@ -244,6 +298,7 @@ async def step_flag(deps: EngineDeps, txn: Txn, now_mono: int) -> None:
 STEPS: list[Step] = [
     step_challenges,
     step_matchmaking,
+    step_anchor_moves,
     step_delivery_grace,
     step_flag,
 ]
