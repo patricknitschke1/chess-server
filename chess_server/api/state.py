@@ -13,6 +13,7 @@ from fastapi import Request
 from chess_server.api.rate_limit import RateLimiter, register_limiter
 from chess_server.api.settings import Settings
 from chess_server.engine.deps import EngineDeps
+from chess_server.engine.mailbox import WaiterRegistry
 from chess_server.engine.ticker import TickerMetrics
 from chess_server.store.db import Store
 from chess_server.store.txn import EventSink, _drop
@@ -30,6 +31,7 @@ class AppState:
     supervisor_task: Optional[asyncio.Task] = None
     limiter: RateLimiter = field(default_factory=RateLimiter)
     register_limiter: RateLimiter = field(default_factory=register_limiter)
+    waiters: WaiterRegistry = field(default_factory=WaiterRegistry)
     deps: EngineDeps = field(init=False)
 
     def __post_init__(self) -> None:
@@ -37,6 +39,7 @@ class AppState:
             conn=self.store.writer,
             executor=self.store.executor,
             sink=self.sink,
+            wake=self.waiters.wake,
             is_paused=lambda: self.matchmaking_paused,
             now_mono=self.now_mono,
         )

@@ -7,8 +7,9 @@ throws away on every start.
 The delivery lives in the mailbox and the mailbox outlives the request, which is
 what makes a superseded poll a cancelled *waiter* and never a lost *delivery*.
 """
+import asyncio
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import Callable, List, Optional
 
 from chess_core import Color, get_legal_moves
 
@@ -85,3 +86,46 @@ async def deliver_for_poll(deps: EngineDeps, bot_id: int) -> Optional[GameRow]:
         bot = await BotRepo(txn.conn, txn.executor).get_by_id(bot_id)
         fill_mailbox_locked(txn, bot, delivered)
         return delivered
+
+
+@dataclass
+class Waiter:
+    event: asyncio.Event
+    superseded: bool = False
+
+
+class WaiterRegistry:
+    """One waiter per bot (§5.4). `EngineDeps.wake` binds to `wake`."""
+
+    def __init__(self, on_register: Optional[Callable[[int], None]] = None):
+        self._waiters: dict[int, Waiter] = {}
+        self.on_register = on_register
+
+    def register(self, bot_id: int) -> Waiter:
+        """The newcomer evicts the incumbent. The flag is set before the event so
+        the loser can never observe a wake it would mistake for a delivery."""
+        incumbent = self._waiters.get(bot_id)
+        if incumbent is not None:
+            incumbent.superseded = True
+            incumbent.event.set()
+        waiter = Waiter(event=asyncio.Event())
+        self._waiters[bot_id] = waiter
+        if self.on_register is not None:
+            self.on_register(bot_id)
+        return waiter
+
+    def wake(self, bot_id: int) -> None:
+        """A no-op for a bot that is not polling: the ticker wakes both seats on
+        every pairing, and most bots are not held at that moment."""
+        waiter = self._waiters.get(bot_id)
+        if waiter is not None:
+            waiter.event.set()
+
+    def discard(self, bot_id: int, waiter: Waiter) -> None:
+        """Only if it is still the registered one — a superseded waiter cleaning
+        up must not evict the successor that replaced it."""
+        if self._waiters.get(bot_id) is waiter:
+            del self._waiters[bot_id]
+
+    def held_count(self) -> int:
+        return len(self._waiters)
