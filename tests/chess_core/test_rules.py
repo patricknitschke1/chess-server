@@ -82,6 +82,32 @@ def test_threefold_detection_uses_position_key():
     assert result == GameResult.DRAW
 
 
+def test_validate_and_apply_move_does_not_claim_threefold():
+    """Repetition is detect_termination's job, not validate_and_apply_move's.
+
+    validate_and_apply_move builds its board from a FEN and pushes one move, so
+    the move stack holds a single entry and python-chess has no history to
+    search. A caller trusting move_result.is_terminal for repetition would grind
+    every shuffle to the 200-ply cap.
+    """
+    shuffle = ["g1f3", "g8f6", "f3g1", "f6g8"] * 2 + ["g1f3"]
+    history_fens = [rules.STARTING_FEN]
+    for uci in shuffle:
+        outcome = rules.validate_and_apply_move(history_fens[-1], uci)
+        history_fens.append(outcome.move_result.fen_after)
+
+    # The last Nf3 completes the third occurrence of the post-Nf3 position.
+    final = rules.validate_and_apply_move(history_fens[-2], "g1f3").move_result
+    assert final.is_terminal is False
+    assert final.termination is None
+
+    assert rules.detect_termination(history_fens[-1], history_fens) == (
+        True,
+        TerminationReason.THREEFOLD,
+        GameResult.DRAW,
+    )
+
+
 def test_insufficient_material_king_vs_king():
     """K vs K is insufficient material."""
     fen = "8/8/8/4k3/8/8/4K3/8 w - - 0 1"

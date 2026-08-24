@@ -105,7 +105,16 @@ def transition_to_terminal(
     
     Returns:
         MatchState with status='finished' or 'aborted' as appropriate
+    
+    Raises:
+        ValueError: if state is already terminal
     """
+    if is_terminal(state):
+        raise ValueError(
+            f"Cannot transition to terminal from {state.status}: "
+            f"already ended as {state.termination}"
+        )
+    
     # Determine if this is an abort or a finish
     abort_reasons = {
         TerminationReason.NO_SHOW,

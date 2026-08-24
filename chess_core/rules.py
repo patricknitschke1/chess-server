@@ -73,10 +73,8 @@ def validate_and_apply_move(fen: str, move_uci: str) -> MoveOutcome:
         is_terminal = True
         termination = TerminationReason.FIFTY_MOVE
         result = GameResult.DRAW
-    elif board.can_claim_threefold_repetition():
-        is_terminal = True
-        termination = TerminationReason.THREEFOLD
-        result = GameResult.DRAW
+    # No threefold arm: this board is built from a FEN and pushed once, so it
+    # carries no position history. Threefold belongs to detect_termination.
     
     move_result = MoveResult(
         fen_after=fen_after,
@@ -179,7 +177,7 @@ def detect_termination(
     if board.is_stalemate():
         return (True, TerminationReason.STALEMATE, GameResult.DRAW)
     
-# Insufficient material is a fact about the position and needs no claim, so it
+    # Insufficient material is a fact about the position and needs no claim, so it
     # outranks the claimable draws below. K vs K reads better than "fifty_move".
     if board.is_insufficient_material():
         return (True, TerminationReason.INSUFFICIENT, GameResult.DRAW)

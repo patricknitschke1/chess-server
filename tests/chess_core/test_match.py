@@ -199,6 +199,46 @@ def test_transition_to_terminal_aborted():
     assert aborted.termination == TerminationReason.NO_SHOW
 
 
+def test_transition_to_terminal_rejects_an_already_terminal_state():
+    """Finalising twice must raise, not silently overwrite the first result."""
+    finished = match.MatchState(
+        status=GameStatus.FINISHED,
+        ply=40,
+        result=GameResult.WHITE_WIN,
+        termination=TerminationReason.CHECKMATE
+    )
+
+    try:
+        match.transition_to_terminal(
+            finished,
+            TerminationReason.FLAG,
+            GameResult.BLACK_WIN
+        )
+        assert False, "Should raise ValueError"
+    except ValueError:
+        pass
+
+
+def test_transition_to_terminal_rejects_an_aborted_state():
+    """Aborted is terminal too; §7 allows no transition out of it."""
+    aborted = match.MatchState(
+        status=GameStatus.ABORTED,
+        ply=0,
+        result=None,
+        termination=TerminationReason.NO_SHOW
+    )
+
+    try:
+        match.transition_to_terminal(
+            aborted,
+            TerminationReason.ADMIN_ABORT,
+            None
+        )
+        assert False, "Should raise ValueError"
+    except ValueError:
+        pass
+
+
 def test_is_terminal():
     """is_terminal detects finished and aborted."""
     finished = match.MatchState(GameStatus.FINISHED, 30, GameResult.DRAW, TerminationReason.STALEMATE)
