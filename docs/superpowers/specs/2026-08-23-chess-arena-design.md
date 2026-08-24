@@ -544,7 +544,7 @@ One `competitor` per owner is enforced at registration; further bots must be `be
 
 ## 11. Time control
 
-Rated play is **3+2** (`TIME_CONTROL_MS=180000`, `INCREMENT_MS=2000`).
+Rated play is **3+2** (`RATED_TIME_CONTROL_NS`, `RATED_INCREMENT_NS` — see §5.2).
 
 **3+2 is not viable for an LLM-agent bot** — at ~12s/move the budget is gone around move 18 (`180 + 2n − 12n < 0`). Revision 1's claim that the increment kept agent bots viable was wrong and is withdrawn.
 

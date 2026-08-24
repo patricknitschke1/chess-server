@@ -346,7 +346,7 @@ async def _tick(tick_number: int):
                 cursor = conn.cursor()
                 cursor.execute("SAVEPOINT pairing")
                 try:
-                    _create_game(pairing.white_bot_id, pairing.black_bot_id, RATED_TIME_CONTROL_MS, RATED_INCREMENT_MS, 'matchmaker')
+                    _create_game(pairing.white_bot_id, pairing.black_bot_id, RATED_TIME_CONTROL_NS, RATED_INCREMENT_MS, 'matchmaker')
                     cursor.execute("RELEASE SAVEPOINT pairing")
                 except sqlite3.IntegrityError:
                     # Seat collision; rollback this pairing only

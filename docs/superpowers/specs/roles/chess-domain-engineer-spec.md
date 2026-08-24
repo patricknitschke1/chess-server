@@ -46,7 +46,7 @@ tests/chess_core/
 ### Who consumes you
 
 - **server-engineer** — calls your functions from `chess_server/engine/runner.py` (move application, clock updates, Elo exchange, match transitions) and `chess_server/engine/ticker.py` (matchmaker, delivery grace checks)
-- **client-engineer** — uses your constants (`TIME_CONTROL_MS`, `INCREMENT_MS`, `STARTING_RATING`) and imports `ClockView` and enums from `chess_core` for SDK types
+- **client-engineer** — uses your constants (`RATED_TIME_CONTROL_NS`, `RATED_INCREMENT_NS`, `STARTING_RATING`) and imports `ClockView` and enums from `chess_core` for SDK types
 - **arena.py** — runs complete games through your rules, clock, Elo, and matchmaker to produce a local leaderboard
 
 ### Boundaries
