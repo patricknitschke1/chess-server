@@ -270,3 +270,32 @@ def test_arena_tracks_elo():
     assert bot1_rating > STARTING_RATING
     assert bot2_rating < STARTING_RATING
     assert bot1_rating + bot2_rating == 2 * STARTING_RATING  # Zero-sum
+
+
+def test_clock_charges_correct_side_from_black_to_move_opening():
+    """Thinking time is charged to whoever actually moved, not always White.
+
+    Openings are randomised (§17), so about half start with Black to move. The
+    clock is created from the FEN's side to move; creating it as White regardless
+    charged Black's thinking to White's clock, and the slow side finished with
+    MORE time than the fast one. Silent, and invisible from the standard opening.
+    """
+    import time as _time
+    import arena
+    from ref_bots import ref_random
+    from chess_core import RATED_TIME_CONTROL_NS, RATED_INCREMENT_NS
+
+    def slow_black(board, clock):
+        _time.sleep(0.05)
+        return ref_random.choose_move(board, clock)
+
+    def fast_white(board, clock):
+        return ref_random.choose_move(board, clock)
+
+    black_to_move = "rnbqkbnr/pp1ppppp/8/2p5/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq - 1 2"
+    result = arena.run_single_game(
+        fast_white, slow_black, "fast_white", "slow_black",
+        RATED_TIME_CONTROL_NS, RATED_INCREMENT_NS, opening_fen=black_to_move,
+    )
+
+    assert result.black_time_ms < result.white_time_ms

@@ -82,7 +82,10 @@ def run_single_game(
     
     # Initialize clock
     now_ns = time.monotonic_ns()
-    clock = create_clock(time_control_ns, increment_ns, Color.WHITE, now_ns)
+    # Openings are randomised (§17), so roughly half start with Black to move. The
+    # clock must agree with the board or every move is charged to the wrong side.
+    starting_side = Color.WHITE if board.turn == chess.WHITE else Color.BLACK
+    clock = create_clock(time_control_ns, increment_ns, starting_side, now_ns)
     
     # Statistics
     white_move_times = []
