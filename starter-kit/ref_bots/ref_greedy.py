@@ -17,7 +17,7 @@ PIECE_VALUES = {
 def choose_move(board: chess.Board, clock: ClockView) -> chess.Move:
     """Choose move that maximizes immediate material gain.
 
-    Calibrated rating: 1000 (measured from seeded arena ladder)
+    Provisional rating: 1000 — a placeholder, NOT a measurement. Calibration is deferred (design §21).
 
     Prefers checkmate, then material, then makes progress. Does not look ahead
     beyond the move itself apart from spotting mate.

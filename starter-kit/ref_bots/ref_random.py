@@ -7,7 +7,7 @@ from chess_client import ClockView
 def choose_move(board: chess.Board, clock: ClockView) -> chess.Move:
     """Choose a random legal move.
     
-    Calibrated rating: 800 (measured from seeded arena ladder)
+    Provisional rating: 800 — a placeholder, NOT a measurement. Calibration is deferred (design §21).
     
     Args:
         board: Current chess position

@@ -534,7 +534,9 @@ Ratings are computed and applied inside the same transaction that finalises the 
 
 Stated precisely, since revision 2 overclaimed: one-sided updates against a fixed anchor **are** a net injection of points into the pool for any single game. What bounds it is that the injection shrinks toward zero as the competitor's rating approaches the anchor's — a bot at 1400 beating `ref-greedy` (1000) gains under 2 points — so a competitor's rating converges to a ceiling near the anchor rather than climbing without limit. Combined with §9.3's ±400 gate and anchors only being offered when nobody else is free, the total injection over a workshop day is small and self-limiting. It is not zero, and the leaderboard is anchored rather than pure-zero-sum by design.
 
-Anchor ratings are **calibrated before the workshop** from one seeded arena ladder, and the measured numbers are recorded next to the constants. Guessed anchor ratings would bias every rating in the room.
+Anchor ratings are **provisional and deliberately uncalibrated** (see §21). The constants shipped today are placeholders, not measurements, and the reference bots' docstrings say so. Calibration is a single seeded arena ladder run before the workshop, recording the measured numbers next to the constants; until that happens, every rating in the room carries whatever bias the placeholders hold.
+
+Nothing in the architecture depends on the numbers being right. Anchor gating (§9.3), one-sided exchange (§10.3) and the leaderboard all work with arbitrary anchor ratings — only the *meaning* of a competitor's rating changes. This is why calibration can be deferred without blocking any other track, and why it must not be quietly skipped.
 
 ### 10.4 Attendee benchmark bots
 
@@ -793,6 +795,14 @@ Phases 2 and 4 are genuine stopping points. Phase 3 is split at the store/API bo
 **Cut:** Postgres capability; `analyze_game` eval swing; widening rating window; two-tier K; 150-move material adjudication; the separate 60s disconnect rule; `poll_token`; `Last-Event-ID` resume; per-bot pause; partial unique indexes for seat enforcement.
 
 **Deferred:** Swiss tournaments; a second rated division; bot code upload with sandboxing; spectator chat; cross-workshop leaderboards; `eval-tuner`; `/improve-bot`.
+
+**Deferred — all bot development.** The strength, tuning and relative ordering of `bot.py` and the three reference bots, and the anchor-rating calibration ladder in §10.3, are out of scope for the current build. The bots exist, play legal chess, manage their clocks and do not crash; that is all any other track needs from them. Specifically deferred:
+
+- Calibrating anchor ratings from a seeded ladder (§10.3). The shipped 800/1000/1200 are placeholders.
+- Any requirement about which bot beats which — notably the baseline beating `ref-random` and losing to `ref-greedy`.
+- Tuning evaluation functions, search depth or move ordering in `bot.py` or `ref_bots/`.
+
+What is **not** deferred, because the server depends on it: the bots' existence and identity, `role='anchor'` handling, anchor gating at ±400 (§9.3), and one-sided rating against anchors (§10.3). Those are architecture; the numbers are content.
 
 **Accepted limits:** flag/abandonment detection resolves at one tick (~1s); a crash loses ~20s of play; one-sided anchor rating injects a small, self-limiting number of points; SQLite plus a global lock would be wrong at 10× scale.
 

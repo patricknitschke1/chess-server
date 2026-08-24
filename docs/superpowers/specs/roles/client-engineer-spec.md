@@ -126,7 +126,7 @@ def choose_move(board: chess.Board, clock: ClockView) -> chess.Move:
 - Must not flag at 3+2 (180s budget, 2s increment). A naive deep search will.
 - Should demonstrate one useful technique (material count + legal move filtering, or shallow alpha-beta, or piece-square tables).
 - Must be under 50 lines including comments, readable on a projector.
-- Should beat `ref-random` reliably and lose to `ref-greedy` reliably, so attendees see rating movement in both directions immediately.
+- ~~Should beat `ref-random` reliably and lose to `ref-greedy` reliably~~ — **deferred, design §21.** No requirement about which bot beats which is in scope. Do not tune any bot's strength to satisfy one.
 
 **Recommendation:** A simple material-counting minimax to depth 2 with a time-per-move budget of `clock.my_ms / 40` (assumes ~40 moves remaining). This is safe at 3+2, demonstrates one technique, and gives newcomers a 60-second improvement path (add piece-square tables).
 
@@ -867,7 +867,7 @@ Wait for your current game to finish.
 
 - **Illegal move handling:** Bot that returns `chess.Move.from_uci("e2e5")` at starting position, assert arena logs illegal attempt and increments counter, does not crash
 
-- **ELO convergence:** Two bots with known win rate (e.g., ref-greedy vs ref-random over 50 games), assert final ratings differ by expected delta ±20
+- **ELO convergence:** ~~Two bots with known win rate (e.g., ref-greedy vs ref-random over 50 games), assert final ratings differ by expected delta ±20~~ — **deferred, design §21.** This asserts a relative bot strength, which is out of scope. Test the Elo arithmetic in `tests/chess_core/test_elo.py` instead, where it needs no bot at all.
 
 - **PGN export:** Run 3-game arena, assert PGN file contains 3 complete games with correct headers (White, Black, Result)
 
@@ -876,7 +876,7 @@ Wait for your current game to finish.
 ### Integration test (optional, in `tests/arena/`)
 
 Run `arena.py` against the shipped baseline bot and `ref-random`, assert:
-- Baseline wins ≥70% of games
+- ~~Baseline wins ≥70% of games~~ — **deferred, design §21.** Strength is out of scope.
 - Baseline flags ≤5% of games at 3+2
 - Mean move time <200ms
 
@@ -935,10 +935,10 @@ This is the acceptance bar: if the shipped baseline fails this test, it is not s
 **Options:**
 
 1. **Depth 1 (immediate captures):** Safest time-wise, very weak.
-2. **Depth 2 with material-only eval:** Safe at 3+2 (~100ms/move), beats ref-random, loses to ref-greedy.
+2. **Depth 2 with material-only eval:** Safe at 3+2 (~100ms/move). (Its relative strength against the reference bots is deferred, design §21.)
 3. **Depth 3 with alpha-beta and piece-square tables:** Stronger, but risks flagging if implemented naively.
 
-**Recommendation:** **Option 2.** Depth 2 is the sweet spot: attendees see rating movement (they beat random, lose to greedy), time management is obvious (budget = `clock.my_ms / 40`), and the implementation fits in 50 lines. Depth 3 requires alpha-beta to be safe, which is too much code for a baseline.
+**Recommendation:** **Option 2.** Depth 2 is the sweet spot: time management is obvious (budget = `clock.my_ms / 40`) and the implementation fits in 50 lines. Depth 3 requires alpha-beta to be safe, which is too much code for a baseline. The original rationale also cited attendees beating random and losing to greedy — that claim is **deferred, design §21**, and is no longer a reason to pick or reject a depth.
 
 **Affects:** `starter-kit/bot.py`
 

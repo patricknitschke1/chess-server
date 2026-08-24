@@ -99,7 +99,7 @@ def minimax(board: chess.Board, depth: int, alpha: int, beta: int, maximizing: b
 def choose_move(board: chess.Board, clock: ClockView) -> chess.Move:
     """Choose best move via minimax search to depth 2.
     
-    Calibrated rating: 1200 (measured from seeded arena ladder)
+    Provisional rating: 1200 — a placeholder, NOT a measurement. Calibration is deferred (design §21).
     
     Uses minimax with alpha-beta pruning to search 2 plies ahead.
     Evaluates positions based on material count only.

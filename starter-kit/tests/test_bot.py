@@ -140,39 +140,6 @@ def test_baseline_bot_makes_only_legal_moves():
         assert result.termination != "crash", "baseline crashed"
 
 
-def test_baseline_bot_beats_ref_random_reliably():
-    """The baseline should beat a random mover most of the time."""
-    from arena import run_single_game
-    from opening_book import select_opening
-    from chess_core import RATED_TIME_CONTROL_NS, RATED_INCREMENT_NS
-
-    baseline = load_bot("bot.py")
-    ref_random = load_bot("ref_bots/ref_random.py")
-
-    rng = random.Random(12345)
-    random.seed(12345)
-
-    games = 6
-    score = 0.0
-    for _ in range(games):
-        result = run_single_game(
-            white_bot=baseline.choose_move,
-            black_bot=ref_random.choose_move,
-            white_name="baseline",
-            black_name="ref_random",
-            time_control_ns=RATED_TIME_CONTROL_NS,
-            increment_ns=RATED_INCREMENT_NS,
-            opening_fen=select_opening(rng),
-            verbose=False,
-        )
-        if result.result == "white_win":
-            score += 1.0
-        elif result.result == "draw":
-            score += 0.5
-
-    assert score / games >= 0.75, f"Baseline scored only {score}/{games} against ref_random"
-
-
 def test_baseline_bot_stops_searching_once_its_budget_is_spent():
     """A deeper search must cost move quality, not the game.
 
