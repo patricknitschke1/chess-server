@@ -227,6 +227,10 @@ _MOVER_JOIN = (
     "                                      ELSE g.black_bot_id END"
 )
 
+# A lookup, not an f-string of the caller's colour: this name reaches SQL text.
+_STRIKE_COLUMN = {Color.WHITE.value: "white_strikes", Color.BLACK.value: "black_strikes"}
+
+
 
 class GameRepo(_Repo):
     async def insert_game(
@@ -362,6 +366,19 @@ class GameRepo(_Repo):
             ),
         )
         assert_cas(cursor)
+
+    async def cas_add_strike(self, game_id: int, from_ply: int, color: str) -> int:
+        """§6.2. Charges a strike without touching ply or the clock: an illegal
+        attempt costs time cumulatively and must not restart the turn."""
+        column = _STRIKE_COLUMN[color]
+        cursor = await self._write(
+            f"UPDATE games SET {column} = {column} + 1"
+            " WHERE id = ? AND ply = ? AND status IN (?, ?)",
+            (game_id, from_ply, *NON_TERMINAL),
+        )
+        assert_cas(cursor)
+        row = await self._one(f"SELECT {column} AS strikes FROM games WHERE id = ?", (game_id,))
+        return row["strikes"]
 
     async def cas_deliver(
         self, game_id: int, ply: int, now_mono: int, now_wall: str

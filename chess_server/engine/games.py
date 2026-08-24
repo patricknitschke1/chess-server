@@ -1,7 +1,7 @@
 """Game creation and the terminal transitions (role spec §6.5, §7.2)."""
 from typing import Optional
 
-from chess_core import STARTING_FEN, Color, GameResult, RatingUpdate, TerminationReason, ns_to_ms
+from chess_core import STARTING_FEN, Color, GameResult, RatingUpdate, TerminationReason
 
 from chess_server.engine import state
 from chess_server.engine.deps import EngineDeps
@@ -19,6 +19,8 @@ _RULE_1_UNRATES = frozenset({
 })
 
 _ABORTS = _RULE_1_UNRATES
+
+ILLEGAL_STRIKE_LIMIT = 3  # design §8.3; chess_core exports no name for it
 
 
 def opposite_win(to_move: str | Color) -> GameResult:
@@ -78,8 +80,8 @@ async def create_game_locked(
         "status": game.status,
         "rated": bool(game.rated),
         "source": source,
-        "time_control_ms": ns_to_ms(time_control_ns),
-        "increment_ms": ns_to_ms(increment_ns),
+        "time_control_ms": game.time_control_ms,
+        "increment_ms": game.increment_ms,
     })
     txn.defer(lambda: deps.wake(white.id))
     txn.defer(lambda: deps.wake(black.id))
@@ -188,4 +190,13 @@ async def abort_game_locked(
     deps: EngineDeps, txn: Txn, game: GameRow, termination: TerminationReason
 ) -> None:
     await _end_game_locked(deps, txn, game, "aborted", None, termination)
+
+
+async def forfeit_game_locked(
+    deps: EngineDeps, txn: Txn, game: GameRow, mover: Color
+) -> None:
+    await _end_game_locked(
+        deps, txn, game, "finished", opposite_win(mover),
+        TerminationReason.ILLEGAL_FORFEIT,
+    )
 

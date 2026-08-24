@@ -2,15 +2,43 @@
 from dataclasses import dataclass
 from typing import Optional
 
-from chess_core import Color, GameResult, TerminationReason, has_flagged
+from chess_core import (
+    STARTING_FEN,
+    Color,
+    GameResult,
+    GameStatus,
+    MatchState,
+    MoveResult,
+    TerminationReason,
+    account_move_and_switch,
+    compute_turn_elapsed_ms,
+    detect_termination,
+    get_legal_moves,
+    has_flagged,
+    transition_after_move,
+    validate_and_apply_move,
+)
 
+from chess_server.engine import state
 from chess_server.engine.deps import EngineDeps
-from chess_server.engine.games import finalise_game_locked, opposite_win
+from chess_server.engine.games import (
+    ILLEGAL_STRIKE_LIMIT,
+    finalise_game_locked,
+    forfeit_game_locked,
+    opposite_win,
+)
 from chess_server.engine.wall import utc_now_iso
 from chess_server.store.cas import CASConflict
-from chess_server.store.repositories import NON_TERMINAL, BotRepo, GameRepo, _clock_from_game
+from chess_server.store.repositories import (
+    NON_TERMINAL,
+    BotRepo,
+    GameRepo,
+    MoveRepo,
+    _clock_from_game,
+)
 from chess_server.store.rows import GameRow
 from chess_server.store.txn import Txn, critical_section
+
 
 
 @dataclass(frozen=True)
@@ -89,6 +117,13 @@ def _mover_id(game: GameRow) -> int:
     return game.white_bot_id if game.to_move == Color.WHITE.value else game.black_bot_id
 
 
+def _history_fens(game: GameRow, fen_after: str) -> list[str]:
+    """Interfaces Part 1: the starting position, every fen_after in order, and the
+    position just reached. Omitting ply 0 loses the commonest repetition there is."""
+    return state.history.get(game.id, [STARTING_FEN]) + [fen_after]
+
+
+
 async def apply_move_locked(
     deps: EngineDeps,
     txn: Txn,
@@ -122,5 +157,101 @@ async def apply_move_locked(
         await finalise_game_locked(deps, txn, game, result, TerminationReason.FLAG)
         return Flagged(result=result)
 
-    raise NotImplementedError("apply_move steps 5-10 land in task 8")
+    outcome = validate_and_apply_move(game.fen, uci)
+    if not outcome.accepted:
+        return await _reject_locked(deps, txn, game, clock.to_move)
+
+    fen_after = outcome.move_result.fen_after
+    terminal, termination, result = detect_termination(
+        fen_after, _history_fens(game, fen_after)
+    )
+    # Built from detect_termination, never from validate_and_apply_move: the
+    # latter is handed one position and so cannot see threefold.
+    move_result = MoveResult(
+        fen_after=fen_after,
+        san=outcome.move_result.san,
+        is_terminal=terminal,
+        termination=termination,
+        result=result,
+    )
+    # Constructed here and discarded here; the only place PLY_CAP is applied.
+    after_state = transition_after_move(
+        MatchState(GameStatus.ACTIVE, game.ply, None, None), move_result
+    )
+
+    # The same now_mono step 4 asked with, so `flagged` here is necessarily False.
+    accounted = account_move_and_switch(clock, receive_mono=now_mono, now_mono=now_mono)
+    new_ply = game.ply + 1
+
+    await MoveRepo(txn.conn, txn.executor).insert_move(
+        game.id, new_ply, uci, move_result.san, fen_after,
+        accounted.elapsed_ms, client_reported_ms,
+    )
+    await games.cas_apply_move(
+        game.id, game.ply, game.status, fen_after, accounted.new_clock
+    )
+    mover_id = _mover_id(game)
+    txn.defer(lambda: state.mailbox.pop(mover_id, None))
+    txn.defer(lambda: state.history.setdefault(game.id, [STARTING_FEN]).append(fen_after))
+
+    game_after = await games.get_by_id(game.id)
+    txn.emit("move_played", {
+        "game_id": game.id,
+        "ply": new_ply,
+        "uci": uci,
+        "san": move_result.san,
+        "fen": fen_after,
+        "to_move": game_after.to_move,
+        "white_ms": game_after.white_ms,
+        "black_ms": game_after.black_ms,
+        "turn_elapsed_ms": compute_turn_elapsed_ms(clock, now_mono),
+        "server_elapsed_ms": accounted.elapsed_ms,
+    })
+
+    if after_state.status != GameStatus.ACTIVE:
+        await finalise_game_locked(
+            deps, txn, game_after, after_state.result, after_state.termination
+        )
+    return Applied(
+        game=game_after,
+        san=move_result.san,
+        fen_after=fen_after,
+        terminal=after_state.status != GameStatus.ACTIVE,
+    )
+
+
+async def _reject_locked(
+    deps: EngineDeps, txn: Txn, game: GameRow, mover: Color
+) -> Rejected:
+    """Commits. Raising here would roll the strike back and §8.3 would not exist."""
+    games = GameRepo(txn.conn, txn.executor)
+    strikes = await games.cas_add_strike(game.id, game.ply, mover.value)
+    forfeited = strikes >= ILLEGAL_STRIKE_LIMIT
+    if forfeited:
+        await forfeit_game_locked(deps, txn, await games.get_by_id(game.id), mover)
+    return Rejected(
+        fen=game.fen,
+        legal_moves=get_legal_moves(game.fen),
+        strikes=strikes,
+        forfeited=forfeited,
+    )
+
+
+async def apply_move(
+    deps: EngineDeps,
+    game_id: int,
+    from_ply: int,
+    uci: str,
+    *,
+    controller: str = "client",
+    client_reported_ms: Optional[int] = None,
+) -> MoveOutcome:
+    async with critical_section(deps.conn, deps.executor, deps.sink) as txn:
+        return await apply_move_locked(
+            deps, txn, game_id, from_ply, uci,
+            controller=controller,
+            client_reported_ms=client_reported_ms,
+            now_mono=deps.now_mono(),
+        )
+
 
