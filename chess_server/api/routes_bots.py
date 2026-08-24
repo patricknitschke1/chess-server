@@ -1,7 +1,7 @@
 """`POST /bots`, `GET /bots/me` (role spec §8.2; design §10.4, §14, §16.2)."""
 import secrets
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Request, status
 
 from chess_core import STARTING_RATING
 
@@ -35,15 +35,17 @@ def _client_ip(request: Request) -> str:
     return request.client.host if request.client else "unknown"
 
 
-@router.post("/bots", status_code=201, response_model=RegisterBotResponse)
+@router.post("/bots", status_code=status.HTTP_201_CREATED, response_model=RegisterBotResponse)
 async def register_bot(payload: RegisterBotRequest, request: Request):
     app_state = get_state(request)
     enforce_register_limit(app_state, _client_ip(request))
     if not secrets.compare_digest(payload.join_code, app_state.settings.join_code):
-        raise ApiError(400, INVALID_JOIN_CODE)
+        raise ApiError(status.HTTP_400_BAD_REQUEST, INVALID_JOIN_CODE)
     validate_identity(payload.name, payload.owner)
     if payload.role not in REGISTRABLE_ROLES:
-        raise ApiError(400, INVALID_ROLE.format(role=payload.role))
+        raise ApiError(
+            status.HTTP_400_BAD_REQUEST, INVALID_ROLE.format(role=payload.role)
+        )
 
     token = secrets.token_urlsafe(TOKEN_BYTES)
     # Both checks and the insert are one transaction, so two simultaneous
@@ -53,12 +55,15 @@ async def register_bot(payload: RegisterBotRequest, request: Request):
     ) as txn:
         bots = BotRepo(txn.conn, txn.executor)
         if await bots.get_by_name(payload.name) is not None:
-            raise ApiError(400, NAME_TAKEN.format(name=payload.name))
+            raise ApiError(
+                status.HTTP_400_BAD_REQUEST, NAME_TAKEN.format(name=payload.name)
+            )
         if payload.role == "competitor":
             existing = await bots.get_competitor_for_owner(payload.owner)
             if existing is not None:
                 raise ApiError(
-                    409, SECOND_COMPETITOR.format(existing_name=existing.name)
+                    status.HTTP_409_CONFLICT,
+                    SECOND_COMPETITOR.format(existing_name=existing.name),
                 )
         bot_id = await bots.insert_bot(
             name=payload.name,

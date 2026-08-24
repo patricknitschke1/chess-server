@@ -7,6 +7,8 @@ on it, and an escape could be missed in one cell. A bot named
 """
 import re
 
+from fastapi import status
+
 from chess_server.api.errors import (
     RESERVED_NAME,
     RESERVED_OWNER,
@@ -27,8 +29,15 @@ def validate_identity(name: str, owner: str) -> None:
     that is not what they think it is."""
     for field, value in (("name", name), ("owner", owner)):
         if not IDENTIFIER.match(value):
-            raise ApiError(422, STRING_SHAPE.format(field=field, value=value))
+            raise ApiError(
+                status.HTTP_422_UNPROCESSABLE_CONTENT,
+                STRING_SHAPE.format(field=field, value=value),
+            )
     if name.casefold() in RESERVED_NAMES:
-        raise ApiError(422, RESERVED_NAME.format(name=name))
+        raise ApiError(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, RESERVED_NAME.format(name=name)
+        )
     if owner.casefold() in RESERVED_OWNERS:
-        raise ApiError(422, RESERVED_OWNER.format(owner=owner))
+        raise ApiError(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, RESERVED_OWNER.format(owner=owner)
+        )

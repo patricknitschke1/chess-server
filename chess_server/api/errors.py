@@ -5,6 +5,8 @@ to be told what to do next, and prose scattered across handlers drifts.
 """
 from typing import Optional
 
+from fastapi import status
+
 NO_BOT_FOR_TOKEN = "No bot registered for this token. Call register_bot first."
 RATE_LIMITED = "Rate limit exceeded."
 RETRY_AFTER_SECONDS = 3
@@ -64,10 +66,12 @@ class ApiError(Exception):
 
 
 def unauthorized() -> ApiError:
-    return ApiError(401, NO_BOT_FOR_TOKEN)
+    return ApiError(status.HTTP_401_UNAUTHORIZED, NO_BOT_FOR_TOKEN)
 
 
 def rate_limited() -> ApiError:
     return ApiError(
-        429, RATE_LIMITED, headers={"Retry-After": str(RETRY_AFTER_SECONDS)}
+        status.HTTP_429_TOO_MANY_REQUESTS,
+        RATE_LIMITED,
+        headers={"Retry-After": str(RETRY_AFTER_SECONDS)},
     )

@@ -8,7 +8,7 @@ import hashlib
 import secrets
 from typing import Optional
 
-from fastapi import Request
+from fastapi import Request, status
 
 from chess_server.api.errors import ADMIN_REQUIRED, ApiError, rate_limited, unauthorized
 from chess_server.api.state import AppState, get_state
@@ -66,4 +66,4 @@ async def require_admin(request: Request) -> None:
     app_state = get_state(request)
     supplied = _bearer_token(request.headers.get("authorization")) or ""
     if not secrets.compare_digest(supplied, app_state.settings.admin_token):
-        raise ApiError(401, ADMIN_REQUIRED)
+        raise ApiError(status.HTTP_401_UNAUTHORIZED, ADMIN_REQUIRED)
