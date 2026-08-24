@@ -178,9 +178,10 @@ Its silent death stops pairing and flagging while the server still looks healthy
 All display timestamps are UTC wall clock. **All elapsed arithmetic uses `time.monotonic_ns()`** so an NTP step or a suspended lid cannot flag the board.
 
 **`bots`**
-`id, name UNIQUE, owner, token_hash INDEXED, role, rating, is_anchor, wins, losses, draws, games_played, controller DEFAULT 'client', last_agent_action_mono, last_poll_at, last_poll_mono, created_at`
+`id, name UNIQUE, owner, token_hash INDEXED, role, rating, is_anchor, wins, losses, draws, games_played, controller DEFAULT 'client', last_agent_action_mono, last_poll_at, last_poll_mono, last_color, white_count, last_opponent_id, created_at`
 
 - `controller` ∈ `client | agent` — who controls the bot (§13.3)
+- `last_color`, `white_count`, `last_opponent_id` are the §9.4 pool-history fields. They live here, denormalised and updated in the finalising transaction, because `pair_bots` needs them every tick and deriving them from `games` is an O(games) scan three times over that three builders would derive three ways.
 
 **`games`**
 `id, white_bot_id, black_bot_id, status, result, termination, fen, ply,
@@ -202,14 +203,18 @@ All display timestamps are UTC wall clock. **All elapsed arithmetic uses `time.m
 
 **`rating_history`** — `bot_id, game_id, rating_before, rating_after, delta, ts`, UNIQUE `(game_id, bot_id)`
 
-**`challenges`** — `id, challenger_bot_id, opponent_bot_id, status, time_control_ms, increment_ms, created_at, resolved_at, game_id, reason`
+**`challenges`** — `id, challenger_bot_id, opponent_bot_id, status, time_control_ms, increment_ms, created_at, created_mono, resolved_at, game_id, reason`
 `status` ∈ `open | queued | consumed | declined | expired`
+
+`created_mono` carries the TTL clock: `CHALLENGE_TTL_NS` is elapsed arithmetic, and this section opens by requiring all elapsed arithmetic to use `monotonic_ns()`. `created_at` is a display timestamp and must not be used to expire anything. §7.1 expires every non-terminal challenge on restart, because a `created_mono` from a dead process is meaningless.
 
 Revision 4 carried seven values. `accepted` was never written (accept marks `queued` directly) and `cancelled` had no endpoint; both are deleted rather than left as states an implementer must reason about and a test must cover.
 
 **The mailbox is process state, not a table.** `mailbox: dict[int, TurnPayload]`, mutated inside the same critical section as the delivery UPDATE (§6.2). §7.1 clears it on every start and nothing outside the process reads it, so a table bought a write on the hottest path under `write_lock` and a repository, in exchange for durability that recovery deliberately discards.
 
-**`arena_reports`** — `id PK, bot_id REFERENCES bots(id), created_at, candidate_name, opponent_name, games, wins, draws, losses, mean_move_ms, p95_move_ms, flags, illegal_attempts, seed, time_control_ms, increment_ms`
+**`arena_reports`** — **DEFERRED, not in this build** (§21). Its producer, `arena.py --report`, is deferred with the arena surface, so the table, its repository, retention pruning, validation and both routes have no client. The schema below is recorded so it survives the deferral; **phase 3a must not create this table.**
+
+`id PK, bot_id REFERENCES bots(id), created_at, candidate_name, opponent_name, games, wins, draws, losses, mean_move_ms, p95_move_ms, flags, illegal_attempts, seed, time_control_ms, increment_ms`
 
 Local arena results posted via `arena.py --report`. **Display-only table: no rating, matchmaking, leaderboard, seat, or game-finalisation code may ever read this table.** This is enforced, not merely asserted: a test greps `chess_server/` for `arena_reports` and fails unless it appears only in `ArenaReportRepo` and the two route handlers (§8.1).
 

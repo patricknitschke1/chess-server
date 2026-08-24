@@ -340,6 +340,14 @@ def deliver_position(
     """
     ...
 
+def is_within(earlier_mono: int, now_mono: int, window_ns: int) -> bool:
+    """Whether `earlier_mono` is no more than `window_ns` ago.
+    
+    Poll recency (§9.1) and challenge TTL (§12) are elapsed arithmetic and belong
+    here, not as a subtraction in `chess_server`. Inclusive boundary.
+    """
+    ...
+
 def remaining_ns(clock: ClockState, color: Color, now_mono: int) -> int:
     """Nanoseconds left on one side's clock, counting time burnt this turn.
     
@@ -1174,11 +1182,11 @@ tests/
 - No mocks, no fixtures, no database
 - Direct function calls with explicit inputs
 - Table-driven tests for combinatorial cases (clock §6.4, termination §22)
-- Property tests for Elo zero-sum and symmetry
+- Property tests for Elo zero-sum (**not** symmetry — Elo is not swap-symmetric; 1000 beating 1400 gains 22, 1400 beating 1000 gains 2)
 - Seeded tests for matchmaker determinism
 
 **`chess_server` integration tests:**
-- In-memory SQLite (`:memory:`)
+- **A real SQLite file under pytest's `tmp_path`, never `:memory:`.** The store opens separate reader and writer connections, and two connections to `:memory:` are two unrelated databases — the reader would never see the writer's rows. WAL, `BEGIN IMMEDIATE` lock contention and `PRAGMA foreign_keys` are also unobservable in memory, and those are exactly what §4 requires the tests to exercise.
 - Full FastAPI test client for API tests
 - Concurrent execution tests for CAS validation per §4.2
 - Recovery tests that simulate server restart

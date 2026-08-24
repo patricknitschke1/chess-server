@@ -83,6 +83,16 @@ def deliver_position(
     )
 
 
+def is_within(earlier_mono: int, now_mono: int, window_ns: int) -> bool:
+    """Whether `earlier_mono` is no more than `window_ns` ago.
+
+    Poll recency (§9.1) and challenge TTL (§12) are elapsed arithmetic, so they
+    belong here rather than as a subtraction in `chess_server`. Boundary is
+    inclusive: exactly `window_ns` ago still counts as within.
+    """
+    return (now_mono - earlier_mono) <= window_ns
+
+
 def remaining_ns(
     clock: ClockState,
     color: Color,

@@ -479,3 +479,13 @@ def test_remaining_ns_does_not_run_before_delivery():
 
     assert clock.remaining_ns(state, Color.WHITE, far_future) == 10_000_000_000
     assert clock.has_flagged(state, far_future) is False
+
+
+def test_is_within_boundary_is_inclusive():
+    """Poll recency and challenge TTL both hinge on this boundary."""
+    now = 10_000_000_000
+    window = 5_000_000_000
+
+    assert clock.is_within(now - window + 1, now, window) is True
+    assert clock.is_within(now - window, now, window) is True
+    assert clock.is_within(now - window - 1, now, window) is False
