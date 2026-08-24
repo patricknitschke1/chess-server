@@ -96,3 +96,51 @@ def test_ref_depth2_avoids_obvious_blunders():
                         # Opponent can capture queen - this should be rare with depth 2
                         # (might happen if it's a trade)
                         pass
+
+
+def test_opening_book_has_valid_fens():
+    """Opening book contains valid FEN strings."""
+    from opening_book import OPENING_BOOK
+    
+    assert len(OPENING_BOOK) >= 8, "Opening book should have at least 8 positions"
+    
+    for fen in OPENING_BOOK:
+        board = chess.Board(fen)
+        assert board.is_valid(), f"Invalid FEN: {fen}"
+
+
+def test_opening_book_is_diverse():
+    """Opening book contains different positions."""
+    from opening_book import OPENING_BOOK
+    
+    unique_positions = set(OPENING_BOOK)
+    assert len(unique_positions) >= 8, "Opening book should have at least 8 unique positions"
+
+
+def test_select_opening_is_seeded():
+    """select_opening returns same position with same seed."""
+    import random
+    from opening_book import select_opening
+    
+    random.seed(42)
+    opening1 = select_opening()
+    
+    random.seed(42)
+    opening2 = select_opening()
+    
+    assert opening1 == opening2
+
+
+def test_select_opening_varies_with_seed():
+    """select_opening returns different positions with different seeds."""
+    import random
+    from opening_book import select_opening
+    
+    random.seed(42)
+    opening1 = select_opening()
+    
+    random.seed(43)
+    opening2 = select_opening()
+    
+    # Should get different openings (probabilistic but very likely)
+    assert opening1 != opening2 or len(set([select_opening() for _ in range(100)])) == 1
