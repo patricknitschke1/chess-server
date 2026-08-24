@@ -159,6 +159,16 @@ class BotRepo(_Repo):
             "UPDATE bots SET last_agent_action_mono = ? WHERE id = ?", (action_mono, bot_id)
         )
 
+    async def clear_monotonic_state(self) -> int:
+        """§7.1 step 4. A monotonic value from a dead process is not merely stale: if
+        the new baseline is lower, every bot ever registered looks like it is polling
+        right now, and they churn through no_show aborts with nothing logged."""
+        cursor = await self._write(
+            "UPDATE bots SET last_poll_mono = NULL, last_agent_action_mono = NULL,"
+            " controller = 'client'"
+        )
+        return cursor.rowcount
+
     async def list_leaderboard(self) -> list[BotRow]:
         rows = await self._all(
             "SELECT * FROM bots WHERE role = 'competitor' ORDER BY rating DESC, name"
@@ -296,6 +306,17 @@ class GameRepo(_Repo):
         )
         return [dict(row) for row in rows]
 
+    async def abort_all_non_terminal(self, termination: str, ended_at: str) -> int:
+        """§7.1 step 1. A sweep, not a CAS: nothing else runs during recovery."""
+        cursor = await self._write(
+            "UPDATE games"
+            "   SET status = 'aborted', termination = ?, rated = 0, ended_at = ?,"
+            "       delivered_to_mover = 0, turn_started_mono = NULL"
+            " WHERE status IN (?, ?)",
+            (termination, ended_at, *NON_TERMINAL),
+        )
+        return cursor.rowcount
+
     async def cas_terminate(
         self,
         game_id: int,
@@ -374,6 +395,10 @@ class SeatRepo(_Repo):
 
     async def list_seated_bot_ids(self) -> list[int]:
         return [row["bot_id"] for row in await self._all("SELECT bot_id FROM seats")]
+
+    async def delete_all_seats(self) -> int:
+        cursor = await self._write("DELETE FROM seats")
+        return cursor.rowcount
 
 
 class MoveRepo(_Repo):
