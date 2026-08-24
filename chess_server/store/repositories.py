@@ -15,7 +15,7 @@ from chess_core import (
 )
 
 from chess_server.store.cas import assert_cas
-from chess_server.store.rows import BotRow, GameRow, from_row
+from chess_server.store.rows import BotRow, GameRow, SeatRow, from_row
 
 NON_TERMINAL = ("pending", "active")
 
@@ -355,3 +355,14 @@ class GameRepo(_Repo):
 class SeatRepo(_Repo):
     async def insert_seat(self, bot_id: int, game_id: int) -> None:
         await self._write("INSERT INTO seats (bot_id, game_id) VALUES (?, ?)", (bot_id, game_id))
+
+    async def delete_seats_for_game(self, game_id: int) -> None:
+        await self._write("DELETE FROM seats WHERE game_id = ?", (game_id,))
+
+    async def get_seat(self, bot_id: int) -> Optional[SeatRow]:
+        return from_row(
+            SeatRow, await self._one("SELECT * FROM seats WHERE bot_id = ?", (bot_id,))
+        )
+
+    async def list_seated_bot_ids(self) -> list[int]:
+        return [row["bot_id"] for row in await self._all("SELECT bot_id FROM seats")]
