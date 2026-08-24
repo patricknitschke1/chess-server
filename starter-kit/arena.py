@@ -5,12 +5,14 @@ Provides diagnostics (time per move, flags, illegal moves) critical for debuggin
 """
 import argparse
 import importlib.util
+import logging
 import random
 import statistics
 import sys
 import time
 from pathlib import Path
 import chess
+import chess.pgn
 from typing import Callable, Optional, List, Dict, Tuple
 from dataclasses import dataclass
 from chess_client import ClockView
@@ -33,6 +35,9 @@ from chess_core import (
     STARTING_RATING,
     compute_rating_exchange,
     compute_draw_exchange,
+    fen_to_ascii,
+    san_list_to_pgn,
+    GameResult as CoreGameResult,
 )
 
 
@@ -409,9 +414,118 @@ class ArenaTracker:
         }
 
 
+_ARENA_RESULT_TO_CORE = {
+    "white_win": CoreGameResult.WHITE_WIN,
+    "black_win": CoreGameResult.BLACK_WIN,
+    "draw": CoreGameResult.DRAW,
+}
+
+
+def export_to_pgn(
+    results: List[GameResult],
+    filepath: str,
+    tracker: Optional['ArenaTracker'] = None
+):
+    """Write game results to a PGN file, one game after another.
+
+    Ratings are included in the headers when a tracker is supplied.
+    """
+    with open(filepath, 'w') as f:
+        for result in results:
+            core_result = _ARENA_RESULT_TO_CORE.get(result.result)
+            if core_result is None:
+                raise ValueError(
+                    f"Cannot export a game whose result is {result.result!r}. "
+                    f"Expected one of: {', '.join(sorted(_ARENA_RESULT_TO_CORE))}."
+                )
+
+            white_rating = tracker.get_rating(result.white_name) if tracker else None
+            black_rating = tracker.get_rating(result.black_name) if tracker else None
+
+            f.write(san_list_to_pgn(
+                result.moves_san,
+                result.white_name,
+                result.black_name,
+                core_result,
+                white_rating,
+                black_rating,
+            ))
+            f.write("\n\n")
+
+
+def replay_game(pgn_path: str, game_number: int) -> int:
+    """Print the board after every move of the Nth (1-based) game in a PGN file.
+
+    Returns the number of moves replayed.
+    """
+    path = Path(pgn_path)
+    if not path.exists():
+        raise ValueError(
+            f"There is no PGN file at {pgn_path}. Record some games first with "
+            f"--bots bot.py ref_bots/ref_greedy.py --pgn {pgn_path}"
+        )
+
+    # python-chess logs unreadable movetext at ERROR level; we report it as prose below.
+    pgn_logger = logging.getLogger("chess.pgn")
+    previous_level = pgn_logger.level
+    pgn_logger.setLevel(logging.CRITICAL)
+    try:
+        with path.open() as handle:
+            game = None
+            found = 0
+            while found < game_number:
+                next_game = chess.pgn.read_game(handle)
+                if next_game is None:
+                    break
+                found += 1
+                game = next_game
+    finally:
+        pgn_logger.setLevel(previous_level)
+
+    if game is None or found < game_number:
+        if found == 0:
+            raise ValueError(
+                f"{pgn_path} contains no games. Record some first with "
+                f"--bots bot.py ref_bots/ref_greedy.py --pgn {pgn_path}"
+            )
+        raise ValueError(
+            f"{pgn_path} contains {found} game(s), so game {game_number} is not in it. "
+            f"Pick a number from --replay 1 to --replay {found}."
+        )
+
+    if game.errors:
+        raise ValueError(
+            f"Game {game_number} in {pgn_path} could not be read back: {game.errors[0]}. "
+            f"A game that started from an opening position needs a [FEN] header in its "
+            f"PGN, which the exporter does not yet write."
+        )
+
+    board = game.board()
+    print(
+        f"Game {game_number}: {game.headers.get('White', '?')} (White) vs "
+        f"{game.headers.get('Black', '?')} (Black)  {game.headers.get('Result', '*')}"
+    )
+    print()
+    print("Starting position")
+    print(fen_to_ascii(board.fen()))
+
+    moves_replayed = 0
+    for move in game.mainline_moves():
+        separator = '.' if board.turn == chess.WHITE else '...'
+        label = f"{board.fullmove_number}{separator} {board.san(move)}"
+        board.push(move)
+        moves_replayed += 1
+
+        print()
+        print(label)
+        print(fen_to_ascii(board.fen()))
+
+    print()
+    print(f"{moves_replayed} moves replayed.")
+    return moves_replayed
+
+
 _load_counter = 0
-
-
 def load_bot_module(path_str: str):
     """Load a bot module from a file path."""
     global _load_counter
@@ -603,7 +717,11 @@ def main(argv=None):
     args = parse_args(argv)
 
     if args.replay is not None:
-        print("Replay is not implemented yet.")
+        try:
+            replay_game(args.pgn, args.replay)
+        except ValueError as e:
+            print(f"Error: {e}", file=sys.stderr)
+            sys.exit(2)
         return
 
     if len(args.bots) < 2:
@@ -663,6 +781,11 @@ def main(argv=None):
             print(f"  {game_number}/{len(schedule)} games complete...")
 
     print_results(tracker, bot_names, args.seed, len(all_results))
+
+    if args.pgn:
+        export_to_pgn(all_results, args.pgn, tracker)
+        print(f"{len(all_results)} games written to {args.pgn}")
+        print(f"Watch one back with: python arena.py --replay 1 --pgn {args.pgn}")
 
 
 if __name__ == '__main__':

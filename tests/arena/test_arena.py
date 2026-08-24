@@ -412,3 +412,125 @@ def test_arena_schedule_spreads_remainder_evenly():
     counts = [len([g for g in schedule if frozenset(g) == pair])
               for pair in (frozenset({'a', 'b'}), frozenset({'a', 'c'}), frozenset({'b', 'c'}))]
     assert max(counts) - min(counts) <= 1
+
+
+# Scholar's mate, legal from the standard starting position so it survives a PGN
+# round trip (san_list_to_pgn writes no [FEN] header).
+SCHOLARS_MATE_SAN = ["e4", "e5", "Bc4", "Nc6", "Qh5", "Nf6", "Qxf7#"]
+SCHOLARS_MATE_UCI = ["e2e4", "e7e5", "f1c4", "b8c6", "d1h5", "g8f6", "h5f7"]
+
+
+def _scholars_mate_result():
+    from arena import GameResult as ArenaGameResult
+
+    return ArenaGameResult(
+        white_name="Bot1",
+        black_name="Bot2",
+        result="white_win",
+        termination="checkmate",
+        moves_san=list(SCHOLARS_MATE_SAN),
+        moves_uci=list(SCHOLARS_MATE_UCI),
+        white_time_ms=170000,
+        black_time_ms=168000,
+        white_move_times=[120, 150, 130],
+        black_move_times=[110, 140],
+        white_flags=0,
+        black_flags=0,
+        white_illegal_attempts=0,
+        black_illegal_attempts=0,
+        ply_count=len(SCHOLARS_MATE_SAN),
+    )
+
+
+def test_arena_exports_pgn(tmp_path):
+    """Arena exports games in PGN format."""
+    from arena import export_to_pgn
+
+    pgn_path = tmp_path / "games.pgn"
+    export_to_pgn([_scholars_mate_result()], str(pgn_path), tracker=None)
+
+    pgn_content = pgn_path.read_text()
+
+    assert "Bot1" in pgn_content
+    assert "Bot2" in pgn_content
+    assert "e4" in pgn_content
+    assert "1-0" in pgn_content
+
+
+def test_export_to_pgn_includes_ratings_from_tracker(tmp_path):
+    """Ratings reach the PGN headers when a tracker is supplied."""
+    from arena import export_to_pgn, ArenaTracker
+
+    tracker = ArenaTracker()
+    tracker.register_bot("Bot1")
+    tracker.register_bot("Bot2")
+
+    pgn_path = tmp_path / "games.pgn"
+    export_to_pgn([_scholars_mate_result()], str(pgn_path), tracker=tracker)
+
+    assert "WhiteElo" in pgn_path.read_text()
+
+
+def test_export_to_pgn_rejects_unknown_result(tmp_path):
+    """An unrecognised result string names itself rather than raising a bare KeyError."""
+    from arena import export_to_pgn
+    from dataclasses import replace
+
+    broken = replace(_scholars_mate_result(), result="white_resigned")
+
+    with pytest.raises(ValueError) as excinfo:
+        export_to_pgn([broken], str(tmp_path / "games.pgn"), tracker=None)
+
+    assert "white_resigned" in str(excinfo.value)
+
+
+def test_arena_replay_round_trips_exported_pgn(tmp_path, capsys):
+    """A game exported to PGN can be replayed back move for move."""
+    import re
+    from arena import export_to_pgn, main
+
+    pgn_path = tmp_path / "games.pgn"
+    export_to_pgn([_scholars_mate_result()], str(pgn_path), tracker=None)
+
+    main(['--replay', '1', '--pgn', str(pgn_path)])
+
+    out = capsys.readouterr().out
+    move_headers = re.findall(r"^\d+\.", out, flags=re.MULTILINE)
+    assert len(move_headers) == len(SCHOLARS_MATE_SAN)
+    assert "Qxf7#" in out
+    assert "Bot1" in out and "Bot2" in out
+
+
+def test_arena_replay_out_of_range_errors_actionably(tmp_path, capsys):
+    """Asking for a game the file does not hold says how many it does hold."""
+    from arena import export_to_pgn, main
+
+    pgn_path = tmp_path / "games.pgn"
+    export_to_pgn([_scholars_mate_result()], str(pgn_path), tracker=None)
+
+    with pytest.raises(SystemExit):
+        main(['--replay', '99', '--pgn', str(pgn_path)])
+
+    err = capsys.readouterr().err
+    assert "1 game" in err
+    assert "--replay 1" in err
+
+
+def test_arena_replay_without_pgn_errors_actionably(capsys):
+    """--replay alone tells the attendee to add --pgn."""
+    from arena import parse_args
+
+    with pytest.raises(SystemExit):
+        parse_args(['--replay', '1'])
+
+    assert "--pgn" in capsys.readouterr().err
+
+
+def test_arena_replay_missing_file_errors_actionably(tmp_path, capsys):
+    """Replaying a file that does not exist explains how to create it."""
+    from arena import main
+
+    with pytest.raises(SystemExit):
+        main(['--replay', '1', '--pgn', str(tmp_path / "nope.pgn")])
+
+    assert "--pgn" in capsys.readouterr().err
