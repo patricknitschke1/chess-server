@@ -1,7 +1,18 @@
 import pytest
 import chess
+import random
 import time
+from pathlib import Path
 from chess_client import ClockView
+
+STARTER_KIT = Path(__file__).resolve().parent.parent
+
+
+def load_bot(relative_path: str):
+    """Load a bot shipped in the starter kit, regardless of the working directory."""
+    from arena import load_bot_module
+
+    return load_bot_module(str(STARTER_KIT / relative_path))
 
 
 def test_clock_view_construction():
@@ -61,3 +72,108 @@ def test_baseline_bot_handles_low_time():
     # With 500ms remaining, should complete very quickly
     assert elapsed_ms < 100, f"Move took {elapsed_ms}ms with 0.5s remaining"
     assert move in board.legal_moves
+
+
+def test_baseline_bot_completes_full_games_without_flagging():
+    """The shipped baseline plays complete games at 3+2 without running out of time.
+
+    This is the acceptance gate: if the baseline flags, it is not safe to hand to
+    attendees, because flagging is how most first bots lose.
+    """
+    from arena import run_single_game
+    from opening_book import select_opening
+    from chess_core import RATED_TIME_CONTROL_NS, RATED_INCREMENT_NS
+
+    baseline = load_bot("bot.py")
+    ref_random = load_bot("ref_bots/ref_random.py")
+
+    rng = random.Random(20260824)
+    random.seed(20260824)
+
+    for game_num in range(4):
+        baseline_is_white = game_num % 2 == 0
+        result = run_single_game(
+            white_bot=baseline.choose_move if baseline_is_white else ref_random.choose_move,
+            black_bot=ref_random.choose_move if baseline_is_white else baseline.choose_move,
+            white_name="baseline" if baseline_is_white else "ref_random",
+            black_name="ref_random" if baseline_is_white else "baseline",
+            time_control_ns=RATED_TIME_CONTROL_NS,
+            increment_ns=RATED_INCREMENT_NS,
+            opening_fen=select_opening(rng),
+            verbose=False,
+        )
+
+        baseline_flags = result.white_flags if baseline_is_white else result.black_flags
+        seat = "White" if baseline_is_white else "Black"
+        assert baseline_flags == 0, f"Game {game_num + 1}: baseline flagged as {seat}"
+
+
+def test_baseline_bot_makes_only_legal_moves():
+    """The baseline never has a move rejected, in either seat."""
+    from arena import run_single_game
+    from opening_book import select_opening
+    from chess_core import RATED_TIME_CONTROL_NS, RATED_INCREMENT_NS
+
+    baseline = load_bot("bot.py")
+    ref_random = load_bot("ref_bots/ref_random.py")
+
+    rng = random.Random(99)
+    random.seed(99)
+
+    for baseline_is_white in (True, False):
+        result = run_single_game(
+            white_bot=baseline.choose_move if baseline_is_white else ref_random.choose_move,
+            black_bot=ref_random.choose_move if baseline_is_white else baseline.choose_move,
+            white_name="baseline" if baseline_is_white else "ref_random",
+            black_name="ref_random" if baseline_is_white else "baseline",
+            time_control_ns=RATED_TIME_CONTROL_NS,
+            increment_ns=RATED_INCREMENT_NS,
+            opening_fen=select_opening(rng),
+            verbose=False,
+        )
+
+        illegal = (
+            result.white_illegal_attempts if baseline_is_white
+            else result.black_illegal_attempts
+        )
+        assert illegal == 0, "baseline attempted an illegal move"
+        assert result.termination != "crash", "baseline crashed"
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason="bot.py has no positional term or tie-break, so with no capture available it "
+           "shuffles and draws by threefold. Scores 3.0/6 (six draws) against ref_random, "
+           "contradicting its own docstring. Owned by bot.py, not by this test.",
+)
+def test_baseline_bot_beats_ref_random_reliably():
+    """The baseline should beat a random mover most of the time."""
+    from arena import run_single_game
+    from opening_book import select_opening
+    from chess_core import RATED_TIME_CONTROL_NS, RATED_INCREMENT_NS
+
+    baseline = load_bot("bot.py")
+    ref_random = load_bot("ref_bots/ref_random.py")
+
+    rng = random.Random(12345)
+    random.seed(12345)
+
+    games = 6
+    score = 0.0
+    for _ in range(games):
+        result = run_single_game(
+            white_bot=baseline.choose_move,
+            black_bot=ref_random.choose_move,
+            white_name="baseline",
+            black_name="ref_random",
+            time_control_ns=RATED_TIME_CONTROL_NS,
+            increment_ns=RATED_INCREMENT_NS,
+            opening_fen=select_opening(rng),
+            verbose=False,
+        )
+        if result.result == "white_win":
+            score += 1.0
+        elif result.result == "draw":
+            score += 0.5
+
+    assert score / games >= 0.75, f"Baseline scored only {score}/{games} against ref_random"
