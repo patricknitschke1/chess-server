@@ -193,6 +193,7 @@ async def seed_anchors_locked(txn: Txn) -> None:
 
 
 async def seed_anchors(conn, executor) -> None:
-    """Called from the lifespan after recovery and before the ticker starts."""
+    """Called from the lifespan before recovery, so recovery's clear_monotonic_state
+    covers the anchors too and recovery stays the last write before the socket opens."""
     async with critical_section(conn, executor) as txn:
         await seed_anchors_locked(txn)
