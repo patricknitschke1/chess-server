@@ -1041,8 +1041,8 @@ This is the acceptance bar: if the shipped baseline fails this test, it is not s
 5. `client_reported_ms` measurement (recommend: wall time, matches server charging, §10.5)
 6. Arena time control default (recommend: 3+2, local must predict live, §10.6)
 
-**New requirement (Harmonization Revision 4):**
-- `arena.py --serve` (stretch goal): Launch local web view at `localhost:8001` to show offline arena results, resolving the "local stats gap" without posting unverifiable data to the server (§3.4)
+**New requirement (revision 5):**
+- `arena.py --report` (opt-in): posts a completed run summary to `POST /arena-reports`, authenticated with the bot token, so local statistics appear in the dashboard's My Bot panel. The arena remains fully functional offline — a failed post logs a warning and never fails the run. There is no `--serve` local web view; that option was superseded (§3.4).
 
 **Document completeness:** This spec is self-contained and buildable. Implementation decisions have recommendations but do not block progress.g traceback)
 5. `client_reported_ms` measurement (recommend: wall time, matches server charging)

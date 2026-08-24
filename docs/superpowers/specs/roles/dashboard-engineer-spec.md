@@ -1214,9 +1214,9 @@ You do **not** produce any HTTP endpoints, SSE events, or MCP tools. You are a r
 **Server dependency resolved:** `ActiveGameSummary` now includes `white_rating` and `black_rating` fields in `GET /state` response (added during harmonization).
 
 **New requirements added in this revision:**
-1. **View any server game:** Clicking grid cells in My Bot mode makes that game locally featured (§7.2)
-2. **Identify "my bot":** URL param `?bot=BotName` or `localStorage` for visual highlighting (§7.3)
-3. **Local stats gap resolved:** Local arena games never reach server; `arena.py --serve` (stretch) provides separate local view
+1. **Watch any server game:** clicking a grid cell in My Bot mode sets local view state (§7.2). The server retains sole authority over the Big Screen featured game.
+2. **Identify "my bot":** URL param `?bot=BotName` or `localStorage` for visual highlighting (§7.3), rendered with `textContent`.
+3. **Local stats:** delivered by `arena.py --report` → `POST /arena-reports`, surfaced through the `arena_report_posted` event and `GET /bots/{bot_id}/arena-reports`, rendered amber and labelled "Local · self-reported" in My Bot mode only.
 
 ---
 
