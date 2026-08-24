@@ -299,7 +299,7 @@ The `delivered_to_mover=0` predicate is what makes re-delivery free. **Re-readin
 
 ### 6.3 Undelivered positions have a deadline
 
-`DELIVERY_GRACE_NS = 15_000_000_000` (15s). Each tick, for any non-terminal game where `delivered_to_mover = 0` and `now − to_move_since_mono > DELIVERY_GRACE_MS`:
+`DELIVERY_GRACE_NS = 15_000_000_000` (15s). Each tick, for any non-terminal game where `delivered_to_mover = 0` and `now − to_move_since_mono > DELIVERY_GRACE_NS`:
 
 - **at ply 0** — the game never started: `aborted`, `no_show`, `rated=0`. Seats freed, the present bot returns to the pool, neither rating moves.
 - **mid-game** — the side to move has gone away: `finished`, `termination='abandoned'`, rated normally, loss for the absent side.
@@ -610,8 +610,8 @@ Errors are actionable prose. Mutating tools carry `destructiveHint`; read-only t
 - **Game creation checks `controller`.** Both §9.1 pool eligibility and §12 challenge consumption require `controller='client'` for both bots, unless the game is an exhibition (§11). Without this, a rated 3+2 game could be created *for* an agent-controlled bot immediately after the refusal above had passed.
 - Taking control **does not alter `turn_started_mono`**. A bot cannot pause its own clock by switching controller.
 - `take_control()` wakes any held poll, which returns `{"game_id": null, "reason": "agent_has_control"}`. There is no window where the SDK still believes it may move.
-- While `controller='agent'`, delivery happens on `get_game()` / `get_legal_moves()` under the §6.2 guard, and `AGENT_DELIVERY_GRACE_MS` applies.
-- `last_agent_action_mono` is updated by every agent tool call. After `AGENT_AUTO_RELEASE_MS = 45000` of inactivity the ticker sets `controller='client'` and wakes waiters. This must stay **below** `AGENT_DELIVERY_GRACE_MS` (60 000); revision 3 had release at 120s, so the delivery grace always fired first and auto-release was unreachable code.
+- While `controller='agent'`, delivery happens on `get_game()` / `get_legal_moves()` under the §6.2 guard, and `AGENT_DELIVERY_GRACE_NS` applies.
+- `last_agent_action_mono` is updated by every agent tool call. After `AGENT_AUTO_RELEASE_NS` (45s) of inactivity the ticker sets `controller='client'` and wakes waiters. This must stay **below** `AGENT_DELIVERY_GRACE_NS` (60s); revision 3 had release at 120s, so the delivery grace always fired first and auto-release was unreachable code.
 - The move endpoint checks `controller` **inside the same transaction as the CAS**, returning `403` on mismatch. Authorisation is not a pre-check.
 
 ---
