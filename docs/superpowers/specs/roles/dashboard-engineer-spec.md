@@ -76,6 +76,12 @@ The navigation model is a **single toggle** between two modes. No tabs, no multi
   - **Rating sparkline** — last 20 games, x-axis is game number, y-axis is rating, hover shows delta
   - "Provisional (N/10 games)" banner if `games_played < 10`
   - Current game status if in a game: "Playing as White vs BetaBot, ply 12"
+  - **Local arena reports** section (amber background, clearly labeled "Local · self-reported"):
+    - Most recent 5 local arena reports from `arena.py --report`
+    - Each entry shows: candidate name, opponent, W-L-D, win rate, avg move time, flags
+    - Fetched from `GET /bots/{bot_id}/arena-reports` on page load
+    - Updated live via `arena_report_posted` SSE events
+    - Never shown in Big Screen mode
 - **Live games grid** (middle left, 30% width, 40% height) — all active games, 4 per row
   - Small board thumbnails (8×8 grid, 30px squares)
   - Participant names (truncated to 12 chars)
@@ -532,6 +538,17 @@ From **Interfaces Part 2**, full event catalog. For each event, what the UI does
 ```
 **Action:** Call `healthBanner.update(data)`. If `last_tick_age_ms > 5000`, show red banner: `"Ticker stalled: last tick {last_tick_age_ms}ms ago"`. Otherwise hide banner.
 
+### `arena_report_posted`
+```json
+{"run": "abc123", "seq": 11, "event_type": "arena_report_posted", "data": {bot_id, bot_name, candidate_name, opponent_name, games, wins, draws, losses, win_rate, mean_move_ms, p95_move_ms, flags}}
+```
+**Action:** In My Bot mode only, if this is the authenticated bot (matched via `?bot=` param or localStorage):
+- Add entry to local arena reports list in the personal panel
+- Format: `"{candidate_name} vs {opponent_name}: {wins}-{losses}-{draws} ({games} games) · {win_rate*100}% · {mean_move_ms}ms avg · {flags} flags"`
+- Render with **amber background** and visible "Local · self-reported" label
+- Keep most recent 5 entries visible; older entries collapsed or scrollable
+- **Never render in Big Screen mode** — local data never appears on the projector
+
 ---
 
 ## 6. Clock rendering — local ticking between events
@@ -697,7 +714,7 @@ class GameClockState {
 
 **Invariant per AGENTS.md and agent definition:** Nobody should ever mistake a practice win for a ranked one.
 
-**Note (Harmonization Revision 4):** Local arena games (from `arena.py`) never reach the server—the arena runs entirely offline. The dashboard shows only server games. For local statistics, `arena.py --serve` (stretch goal) can launch a separate web view at `localhost:8001`.
+**Note (Harmonization Revision 4):** Local arena reports (from `arena.py --report`) are displayed in the My Bot personal panel with **amber background** and a visible "Local · self-reported" label. They are fetched from `GET /bots/{bot_id}/arena-reports` and updated live via `arena_report_posted` SSE events. Local data **never appears in Big Screen mode**—only server games are shown on the projector.
 
 ### Color-coding
 
@@ -705,6 +722,7 @@ class GameClockState {
 |---|---|---|---|
 | Rated (`rated: true`) | `#4a934c` green | `#2d5f2e` green (15% opacity) | "RATED" |
 | Unrated (`rated: false`) | `#c9a500` amber | `#8b6f00` amber (15% opacity) | "UNRATED" |
+| Local arena report | N/A | `#8b6f00` amber (30% opacity) | "Local · self-reported" |
 
 **Application:**
 - Featured game board: border and badge top-right corner

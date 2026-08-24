@@ -261,8 +261,9 @@ Every claim is codeable. If I write "prioritize king safety", I must immediately
 2. **The ref-* ladder** — ref-random (1000 ELO), ref-greedy (1000 ELO, material-only), ref-depth2 (1400 ELO, 2-ply search). Beating ref-greedy consistently (60%+ win rate over 50 games) means your evaluation works; beating ref-depth2 means your search is strong.
 3. **Reading the stats** — flag count is the first thing to check. If `flags: 8` and `wins: 2`, time management is broken, not the evaluation.
 4. **The bar for deploying** — new version beats old version in ≥60 of 100 games, **and flags ≤2 times per 100 games**, or do not deploy. A version that wins more but flags more is not better.
+5. **Posting local results to the dashboard (opt-in)** — `python arena.py --bots bot.py baseline.py --games 100 --report` posts a summary to the server, visible in your My Bot panel on the dashboard with an amber "Local · self-reported" label. Explain why local numbers are unverified: they never affect the rated leaderboard, and you can report "1000 wins" against a bot that doesn't exist. Local stats are for **your** tuning loop, not for competitive claims. The `--report` flag requires a bot token (from `run.py --register`) but the arena still works fully offline if the server is down or the POST fails.
 
-**Seam consumed:** `client-engineer` delivers `arena.py --bots ... --games N --seed S`, which prints a table with columns `bot_name | rating | W | L | D | flags | illegal`. I document that exact output format.
+**Seam consumed:** `client-engineer` delivers `arena.py --bots ... --games N --seed S`, which prints a table with columns `bot_name | rating | W | L | D | flags | illegal`. I document that exact output format. `arena.py --report` POSTs to the server and logs success or failure; I explain why the failure is not critical (arena remains offline-first).
 
 ---
 

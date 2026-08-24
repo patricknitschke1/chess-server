@@ -176,6 +176,10 @@ All display timestamps are UTC wall clock. **All elapsed arithmetic uses `time.m
 
 **`mailbox`** — `bot_id PK, payload_json, delivered_mono` (§8.4)
 
+**`arena_reports`** — `id PK, bot_id REFERENCES bots(id), created_at, candidate_name, opponent_name, games, wins, draws, losses, mean_move_ms, p95_move_ms, flags, illegal_attempts, seed, time_control_ms, increment_ms`
+
+Local arena results posted via `arena.py --report`. **Display-only table: no rating, matchmaking, leaderboard, seat, or game-finalisation code may ever read this table.** Retention: keep 20 most recent rows per `bot_id`, prune older rows in the same transaction as insert under `write_lock`.
+
 ### 5.1 What sets `rated`
 
 Evaluated **first match wins**, top to bottom:
@@ -309,6 +313,11 @@ GET  /games/{id}
 GET  /state                    dashboard snapshot; returns current event id
 GET  /events                   SSE stream
 GET  /health
+POST /arena-reports            {candidate_name, opponent_name, games, wins, draws,
+                                losses, mean_move_ms, p95_move_ms, flags,
+                                illegal_attempts, seed, time_control_ms,
+                                increment_ms} -> {report_id}
+GET  /bots/{bot_id}/arena-reports  -> [{id, created_at, candidate_name, ...}]
 ```
 
 All authenticated endpoints use `Authorization: Bearer <token>` (§16.2).
@@ -513,9 +522,24 @@ In My Bot mode, the live games grid shows all active server games as small board
 
 To identify "my bot" in the dashboard (which is unauthenticated and read-only): URL parameter `?bot=BotName` or localStorage. Display a "YOU" badge next to that bot in grids and leaderboard. No authentication required—this is display sugar only.
 
-Rated games render **green**, unrated **amber**. Nobody should mistake a practice win for a ranked one.
+**Color coding for game types:**
+- Rated server games render **green**
+- Unrated server games render **amber**
+- Local arena reports (self-reported via `arena.py --report`) render **amber** with a visible "Local · self-reported" label
 
-**Local arena games** (from `arena.py`) never reach the server — the arena runs entirely offline. For local statistics visualization, `arena.py --serve` (stretch goal) can launch a local web server at `localhost:8001` showing that run's results. The main dashboard at `localhost:8000` shows only server games.
+Nobody should mistake a practice win for a ranked one, or unverified local data for server results.
+
+### Local arena reporting
+
+`arena.py --report` (opt-in) posts a summary of a completed local run to the server, authenticated with the bot token. The server stores it in `arena_reports`, emits an SSE event, and the dashboard shows it in the My Bot panel.
+
+**Hard constraints:**
+- `arena_reports` is **display-only**. No rating, matchmaking, leaderboard, seat, or game-finalisation code may ever read this table. This is an invariant, not a preference.
+- Local data is rendered **amber** with a visible "Local · self-reported" label in all contexts.
+- Local data **never appears in Big Screen mode**. The projector shows verified competition only.
+- Reporting is **opt-in** via `--report` flag. The arena remains fully functional offline; a failed POST logs a warning and never fails the run.
+
+The My Bot panel displays local reports alongside server game results, clearly distinguished by color and label. An attendee can see "I beat baseline 85/100 locally" without that number ever touching the rated leaderboard.
 
 **SSE:**
 

@@ -327,3 +327,97 @@ The following are explicitly marked "non-blocking" or "deferred":
 **Approve Revision 4.** All contradictions resolved, all decisions made, all seams met. The specification is consistent, complete, and ready for parallel build tracks to begin.
 
 Next step: Distribute updated role specs to the six agent tracks and proceed with Phase 1 implementation.
+
+---
+
+## 15. OVERRIDE — Local Arena Reporting (Post-Harmonization)
+
+**Date:** 2026-08-24 (after Revision 4 approval)  
+**Initiator:** Project owner  
+**Status:** ✅ **APPLIED** — Specs updated, harmonisation decision overridden
+
+### Background
+
+Harmonization Revision 4 (§1.5 above) resolved the "local arena stats on dashboard" gap by choosing **Option 2**: keep local results entirely off the server and push them to a stretch-goal `arena.py --serve` local web view.
+
+**That decision is overridden.** The project owner explicitly requires local statistics visible on the main dashboard. The hard constraint was that local results must never influence a *rated leaderboard* — not that they must never reach the server. Option 1 satisfies the constraint, and the previous pass over-read it.
+
+### The Override Decision: Opt-In Local Arena Reporting
+
+**Data flow:** `arena.py --report` posts a summary of a completed local run to the server, authenticated with the attendee's bot token. The server stores it in a dedicated `arena_reports` table, emits an SSE event, and the dashboard shows it in the My Bot panel — clearly labelled as self-reported and unverified.
+
+**Hard constraints (stated explicitly in every affected spec):**
+- `arena_reports` is **display-only**. No rating, matchmaking, leaderboard, seat, or game-finalisation code may ever read this table. This is an invariant, not a preference.
+- Local data is rendered **amber** with a visible "Local · self-reported" label in all contexts.
+- Local data **never appears in Big Screen mode**. The projector shows verified competition only.
+- Reporting is **opt-in** via `--report` flag. The arena remains fully functional offline; a failed POST logs a warning and never fails the run.
+
+### Schema Addition (Design Spec §5)
+
+```sql
+CREATE TABLE arena_reports (
+  id                 INTEGER PRIMARY KEY,
+  bot_id             INTEGER NOT NULL REFERENCES bots(id),
+  created_at         TEXT NOT NULL,
+  candidate_name     TEXT NOT NULL,
+  opponent_name      TEXT NOT NULL,
+  games              INTEGER NOT NULL,
+  wins               INTEGER NOT NULL,
+  draws              INTEGER NOT NULL,
+  losses             INTEGER NOT NULL,
+  mean_move_ms       INTEGER NOT NULL,
+  p95_move_ms        INTEGER NOT NULL,
+  flags              INTEGER NOT NULL,
+  illegal_attempts   INTEGER NOT NULL,
+  seed               INTEGER NOT NULL,
+  time_control_ms    INTEGER NOT NULL,
+  increment_ms       INTEGER NOT NULL
+);
+```
+
+**Retention:** Keep 20 most recent rows per `bot_id`; prune older rows in the same transaction as the insert, under `write_lock`.
+
+### New Endpoints (Design Spec §8.1, Interfaces Part 5)
+
+- **`POST /arena-reports`** — authenticated with bot token. `201` returning `{report_id}`. Errors: `401` (no/invalid token), `422` (malformed payload), `429` (rate limited).
+- **`GET /bots/{bot_id}/arena-reports`** — unauthenticated, returns most recent 20 reports for that bot, ordered by `created_at` descending.
+
+Full Pydantic models defined in Interfaces Part 5.
+
+### SSE Event (Interfaces Part 2)
+
+`arena_report_posted`, carrying `bot_id`, `bot_name`, `candidate_name`, `opponent_name`, `games`, `wins`, `draws`, `losses`, `win_rate`, `mean_move_ms`, `p95_move_ms`, `flags`. No tokens. Follows the existing `{"run", "seq"}` envelope.
+
+### Files Changed
+
+1. **Design spec** — `arena_reports` table added to §5, endpoints added to §8.1, §14 updated to restore amber rule for local data and describe My Bot local panel (replaced the paragraph about `arena.py --serve`)
+2. **Interfaces doc** — Pydantic models added to Part 5, `arena_report_posted` event added to Part 2
+3. **server-engineer-spec.md** — `arena_reports` table and display-only invariant added to schema section, `ArenaReportRepo` added to repository list, two endpoints added to routes section, `arena_report_posted` event constructor added to SSE section
+4. **client-engineer-spec.md** — `arena.py --report` flag added to §3.4 with payload building, token source, offline-first failure behaviour (warn, never fail the run)
+5. **dashboard-engineer-spec.md** — My Bot personal panel updated to include local arena reports section (amber background, "Local · self-reported" label), `arena_report_posted` event handler added to §5, color table updated to include local report row, never renders in Big Screen mode
+6. **workshop-author-spec.md** — `benchmarking-a-bot.md` updated to document `--report` flag and explain why local numbers are labelled unverified
+7. **roles/README.md** — decision table updated to replace "local stats via `arena.py --serve`" with "opt-in local arena reporting", deprecated decisions section added
+8. **This report** — this §15 appended to record the override
+
+### Why This Override
+
+The original Option 2 decision (`arena.py --serve`) was correct given the stated constraint "must not create a path by which local, unverifiable results can influence a rated leaderboard." However, the constraint was narrower than assumed: it prohibits local data *influencing ratings*, not *reaching the server*.
+
+Option 1 (opt-in reporting to the main dashboard) satisfies the constraint by:
+- Using a dedicated `arena_reports` table that is architecturally isolated from rating logic (stated as an invariant in three specs)
+- Labelling all local data amber with "self-reported" text in the UI
+- Never rendering local data in Big Screen mode (projector shows verified competition only)
+- Making reporting opt-in, preserving arena's offline-first design
+
+The override provides better UX (one dashboard instead of two), avoids the `--serve` implementation complexity, and still maintains the hard invariant that local data never affects the rated leaderboard.
+
+### Verification
+
+- Display-only invariant stated explicitly in server-engineer-spec.md schema section
+- Amber rendering and "Local · self-reported" label specified in dashboard-engineer-spec.md color table and My Bot panel
+- Big Screen mode exclusion stated in dashboard-engineer-spec.md event handler
+- Offline-first failure behaviour specified in client-engineer-spec.md §3.4
+- All specs remain buildable without re-reading the design spec
+
+**No normative behaviours (§4, §6, §7.1) were relaxed or contradicted by this override.**
+

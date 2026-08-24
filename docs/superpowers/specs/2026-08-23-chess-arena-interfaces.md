@@ -598,6 +598,8 @@ EVENT_BOT_CONNECTED = "bot_connected"
 EVENT_BOT_DISCONNECTED = "bot_disconnected"
 EVENT_CHALLENGE_UPDATED = "challenge_updated"
 EVENT_HEALTH_TICK = "health_tick"
+EVENT_ARENA_REPORT_POSTED = "arena_report_posted"
+EVENT_ARENA_REPORT_POSTED = "arena_report_posted"
 ```
 
 ### Event Payloads
@@ -790,6 +792,56 @@ When `status` is `consumed`, `game_id` is populated. When `status` is
 `expired` or `cancelled`, `reason` may carry context (e.g.,
 "seat_unavailable", "timeout").
 
+#### `arena_report_posted`
+Fired when a local arena report is posted via `arena.py --report`.
+```json
+{
+  "run": "abc123",
+  "seq": 11,
+  "event_type": "arena_report_posted",
+  "data": {
+    "bot_id": 1,
+    "bot_name": "AlphaBot",
+    "candidate_name": "AlphaBot v2",
+    "opponent_name": "baseline",
+    "games": 100,
+    "wins": 67,
+    "draws": 15,
+    "losses": 18,
+    "win_rate": 0.67,
+    "mean_move_ms": 45,
+    "p95_move_ms": 120,
+    "flags": 2
+  }
+}
+```
+No tokens. `win_rate` is computed as `wins / games` at emit time.
+
+#### `arena_report_posted`
+Fired when a local arena report is posted via `arena.py --report`.
+```json
+{
+  "run": "abc123",
+  "seq": 11,
+  "event_type": "arena_report_posted",
+  "data": {
+    "bot_id": 1,
+    "bot_name": "AlphaBot",
+    "candidate_name": "AlphaBot v2",
+    "opponent_name": "baseline",
+    "games": 100,
+    "wins": 67,
+    "draws": 15,
+    "losses": 18,
+    "win_rate": 0.67,
+    "mean_move_ms": 45,
+    "p95_move_ms": 120,
+    "flags": 2
+  }
+}
+```
+No tokens. `win_rate` is computed as `wins / games` at emit time.
+
 #### `health_tick`
 Sent every ~3-5 seconds as a stale-tick signal per §4.6.
 ```json
@@ -808,8 +860,6 @@ Sent every ~3-5 seconds as a stale-tick signal per §4.6.
   }
 }
 ```
-
----
 
 ## Part 3 — Bot and SDK Surface
 
@@ -1490,6 +1540,67 @@ All require `Authorization: Bearer <ADMIN_TOKEN>`.
   class ResetResponse(BaseModel):
       wiped_games: int
       wiped_moves: int
+### Arena Reports
+
+**POST /arena-reports**
+- **Authenticated** (bot token)
+- **Request:**
+  ```python
+  class SubmitArenaReportRequest(BaseModel):
+      candidate_name: str
+      opponent_name: str
+      games: int
+      wins: int
+      draws: int
+      losses: int
+      mean_move_ms: int
+      p95_move_ms: int
+      flags: int
+      illegal_attempts: int
+      seed: int
+      time_control_ms: int
+      increment_ms: int
+  ```
+- **Response (201):**
+  ```python
+  class SubmitArenaReportResponse(BaseModel):
+      report_id: int
+  ```
+- **Errors:**
+  - `401` — ErrorResponse: "No bot registered for this token. Call register_bot first."
+  - `422` — ErrorResponse: "Invalid payload", includes validation details
+  - `429` — ErrorResponse: "Rate limit exceeded", Retry-After header
+
+**GET /bots/{bot_id}/arena-reports**
+- **Unauthenticated**
+- **Response (200):**
+  ```python
+  class BotArenaReportsResponse(BaseModel):
+      bot_id: int
+      bot_name: str
+      reports: List[ArenaReportEntry]
+  
+  class ArenaReportEntry(BaseModel):
+      id: int
+      created_at: str  # ISO 8601
+      candidate_name: str
+      opponent_name: str
+      games: int
+      wins: int
+      draws: int
+      losses: int
+      mean_move_ms: int
+      p95_move_ms: int
+      flags: int
+      illegal_attempts: int
+      seed: int
+      time_control_ms: int
+      increment_ms: int
+  ```
+  Returns most recent 20 reports, ordered by `created_at` descending.
+- **Errors:**
+  - `404` — ErrorResponse: "Bot not found: {bot_id}"
+
       wiped_rating_history: int
       wiped_seats: int
       wiped_mailboxes: int

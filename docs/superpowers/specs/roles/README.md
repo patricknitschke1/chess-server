@@ -68,14 +68,17 @@ All interface-affecting decisions have been resolved and applied to the affected
 | Featured game policy | Highest rating sum, ≥20s hold, tie-break on `game_id` | `dashboard-engineer` |
 | `analyze_game` format | Markdown: PGN + timing table + event log | `mcp-engineer` |
 | Provisional annotation | Computed field `games_played < 10` | `server-engineer` / `dashboard-engineer` |
-| Local stats gap | `arena.py --serve` (stretch) for local view; dashboard shows server games only | `client-engineer` / `dashboard-engineer` |
+| Local arena reporting | Opt-in `arena.py --report` POSTs to server; display-only table | `server-engineer` / `client-engineer` / `dashboard-engineer` |
 | View any game | Click grid cells to feature locally (client-side) | `dashboard-engineer` |
 | Opening book | Mainline openings, internal implementation | `client-engineer` (non-blocking) |
 
-**New requirements added:**
+**New requirements added (post-harmonization override):**
 1. **View any server game** — Dashboard grid cells clickable in My Bot mode (§7.2 in dashboard-engineer)
 2. **Identify "my bot"** — URL param `?bot=BotName` or `localStorage` for visual highlighting (§7.3 in dashboard-engineer)
-3. **Local arena statistics** — `arena.py --serve` (stretch) launches local web view at `localhost:8001` (§3.4 in client-engineer)
+3. **Opt-in local arena reporting** — `arena.py --report` POSTs summary to server (design spec §8.1, §14; owned by server-engineer for endpoints and table, client-engineer for --report flag, dashboard-engineer for My Bot panel display)
+
+**Deprecated decisions (overridden):**
+- ~~Local stats via `arena.py --serve`~~ — replaced by opt-in reporting to main dashboard
 
 **Implementation decisions (non-blocking):**
 - Baseline bot depth, re-poll interval, exception handling, clock measurement, arena defaults — all owned by `client-engineer` with recommendations in §10

@@ -43,6 +43,7 @@ starter-kit/     What attendees clone. bot.py is the only file they edit.
 - **Elapsed time is `time.monotonic_ns()`, never wall clock.** A laptop suspend must not flag the board.
 - **A clock starts on delivery, not on pairing**, and delivery is idempotent — re-reading a position never restarts the clock.
 - **Bot tokens are stored hashed and never logged.** Not in errors, not in debug output, not in SSE payloads.
+- **`arena_reports` is display-only.** Local arena results are self-reported and unverifiable. No rating, matchmaking, leaderboard, seat, or game-finalisation code may read that table.
 - **`chess_core` stays pure.** If you need the time, pass it in. This is what keeps ELO and matchmaking testable.
 - **Errors aimed at attendees are actionable prose**, not bare status codes. `"No bot registered for this token. Call register_bot first."`
 - **The local arena randomises openings.** Two deterministic bots otherwise replay one identical game, and "100 games" becomes a statistical illusion.

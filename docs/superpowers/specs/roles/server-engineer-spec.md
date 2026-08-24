@@ -143,6 +143,39 @@ CREATE TABLE mailbox (
   payload_json    TEXT NOT NULL,
   delivered_mono  INTEGER NOT NULL
 );
+
+CREATE TABLE arena_reports (
+  id                 INTEGER PRIMARY KEY,
+  bot_id             INTEGER NOT NULL REFERENCES bots(id),
+  created_at         TEXT NOT NULL,
+  candidate_name     TEXT NOT NULL,
+  opponent_name      TEXT NOT NULL,
+  games              INTEGER NOT NULL,
+  wins               INTEGER NOT NULL,
+  draws              INTEGER NOT NULL,
+  losses             INTEGER NOT NULL,
+  mean_move_ms       INTEGER NOT NULL,
+  p95_move_ms        INTEGER NOT NULL,
+  flags              INTEGER NOT NULL,
+  illegal_attempts   INTEGER NOT NULL,
+  seed               INTEGER NOT NULL,
+  time_control_ms    INTEGER NOT NULL,
+  increment_ms       INTEGER NOT NULL
+);
+```
+
+**INVARIANT: `arena_reports` is display-only.** No rating, matchmaking, leaderboard, seat, or game-finalisation code may ever read this table. This is an architectural constraint, not a preference. The table exists solely to store self-reported local arena results for display in the dashboard's My Bot panel.
+
+**Retention:** Keep 20 most recent rows per `bot_id`. Pruning happens in the same transaction as the insert, under `write_lock`, using:
+```sql
+DELETE FROM arena_reports
+ WHERE bot_id = ?
+   AND id NOT IN (
+     SELECT id FROM arena_reports
+      WHERE bot_id = ?
+      ORDER BY created_at DESC
+      LIMIT 20
+   )
 ```
 
 **`repositories.py`** — typed data-access layer wrapping all SQL:
@@ -154,6 +187,7 @@ CREATE TABLE mailbox (
 - `RatingHistoryRepo` — `insert_rating_change`
 - `ChallengeRepo` — `insert_challenge`, `update_challenge_status`, `get_challenge_by_id`, `get_open_challenges_for_bot`, `get_challenges_inbox`, `get_queued_challenges`, `get_expired_open_challenges`
 - `MailboxRepo` — `write_mailbox`, `read_mailbox`, `clear_mailbox`, `clear_all_mailboxes`
+- `ArenaReportRepo` — `insert_report`, `get_reports_for_bot`, `prune_old_reports`
 
 Every repository method that writes wraps its SQL in a function that **expects to be called inside a transaction under `write_lock`**. No repository method calls `BEGIN` or `COMMIT` — that is the caller's responsibility.
 
@@ -712,6 +746,11 @@ async def health():
 - **POST /admin/reset** — wipe games/moves/rating_history/seats/mailboxes, reset bot counters to zero, keep bot identities
 - **GET /admin/consistency** — assert `bots.rating == 1200 + sum(rating_history.delta)` for all bots; return violations
 
+**Arena reports endpoints** per design spec §8.1:
+
+- **POST /arena-reports** (authenticated, bot token) — accepts local arena report payload per Part 5, inserts into `arena_reports`, prunes old reports (keep 20 most recent per bot), emits `arena_report_posted` SSE event, returns `201` with `{report_id}`. Errors: `401` (invalid token), `422` (malformed payload), `429` (rate limited).
+- **GET /bots/{bot_id}/arena-reports** (unauthenticated) — returns most recent 20 reports for the bot, ordered by `created_at` descending, per Part 5 `BotArenaReportsResponse`. Returns `404` if bot not found.
+
 **`sse.py`** — SSE emission per §14:
 
 ```python
@@ -743,6 +782,7 @@ def game_started_event(...): ...
 def move_played_event(...): ...
 def game_ended_event(...): ...
 def rating_changed_event(...): ...
+def arena_report_posted_event(bot_id, bot_name, candidate_name, opponent_name, games, wins, draws, losses, mean_move_ms, p95_move_ms, flags): ...
 # etc.
 ```
 

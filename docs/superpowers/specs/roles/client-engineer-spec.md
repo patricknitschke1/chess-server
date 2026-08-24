@@ -399,6 +399,49 @@ R N B Q K B N R
 [Press Enter for next move, 'q' to quit]
 ```
 
+**`--report` flag — opt-in local arena reporting per design spec §14:**
+
+```bash
+python arena.py --bots bot.py baseline.py --games 100 --seed 7 --report
+```
+
+When `--report` is present:
+
+1. After completing the arena run, build a report payload matching `SubmitArenaReportRequest` from Interfaces Part 5:
+   ```python
+   {
+       "candidate_name": candidate_bot_name,  # first bot in --bots
+       "opponent_name": opponent_bot_name,     # second bot in --bots, or "mixed" if >2 bots
+       "games": total_games,
+       "wins": candidate_wins,
+       "draws": candidate_draws,
+       "losses": candidate_losses,
+       "mean_move_ms": int(mean_move_time_ms),
+       "p95_move_ms": int(p95_move_time_ms),
+       "flags": candidate_flags,
+       "illegal_attempts": candidate_illegal_attempts,
+       "seed": seed,
+       "time_control_ms": time_control_ms,
+       "increment_ms": increment_ms
+   }
+   ```
+
+2. Read token from `.env` or `CHESS_BOT_TOKEN` env var
+
+3. POST to `/arena-reports` with bearer token authentication
+
+4. **Offline-first failure behaviour:**
+   - On success (201): Log `"Arena report posted (report_id={id})"`
+   - On network error or server unavailable: Log warning `"Could not post arena report (server unavailable). Results saved locally."` and **continue normally**
+   - On 401 (invalid token): Log warning `"Could not post arena report (no valid bot token). Run 'python run.py --register' first."` and **continue normally**
+   - On 429 (rate limited): Log warning `"Could not post arena report (rate limited). Try again later."` and **continue normally**
+   
+   **NEVER fail the arena run** because of a failed POST. The arena must remain fully functional offline.
+
+5. The token is read from the same `.env` file that `run.py` uses, so `--report` requires that a bot has been registered, but does not require the server to be running during the arena execution itself — only during the final POST.
+
+**Token source:** Same as `run.py` — `.env` file with `CHESS_BOT_TOKEN=<token>` or environment variable. If no token is found, log the `401` warning and continue.
+
 **`--serve` flag (Stretch Goal, added Harmonization Revision 4):**
 
 ```bash
