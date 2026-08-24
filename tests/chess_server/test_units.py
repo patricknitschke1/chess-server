@@ -57,6 +57,9 @@ ALLOWED = {
     "reference_bots.py": {
         PLY_CAP, STARTING_RATING, ns_to_ms(TICK_INTERVAL_NS), ns_to_ms(POLL_HOLD_NS),
     },
+    # Ops thresholds for tick staleness, numerically equal to DELIVERY_GRACE_NS
+    # and POLL_RECENCY_NS and unrelated to either. They decide no game outcome.
+    "supervisor.py": {DELIVERY_GRACE_NS, POLL_RECENCY_NS},
 }
 
 
