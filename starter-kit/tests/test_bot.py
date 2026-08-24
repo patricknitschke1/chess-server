@@ -140,12 +140,6 @@ def test_baseline_bot_makes_only_legal_moves():
         assert result.termination != "crash", "baseline crashed"
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="bot.py has no positional term or tie-break, so with no capture available it "
-           "shuffles and draws by threefold. Scores 3.0/6 (six draws) against ref_random, "
-           "contradicting its own docstring. Owned by bot.py, not by this test.",
-)
 def test_baseline_bot_beats_ref_random_reliably():
     """The baseline should beat a random mover most of the time."""
     from arena import run_single_game
@@ -177,3 +171,21 @@ def test_baseline_bot_beats_ref_random_reliably():
             score += 0.5
 
     assert score / games >= 0.75, f"Baseline scored only {score}/{games} against ref_random"
+
+
+def test_baseline_bot_plays_mate_in_one():
+    """The baseline must take checkmate when it is one move away.
+
+    Scoring terminal nodes from `board.turn` instead of a fixed perspective makes
+    delivering mate come back as -20000, the worst score available, so the bot
+    avoids winning. That reads as "it just shuffles" and is very hard to spot.
+    """
+    baseline = load_bot("bot.py")
+
+    board = chess.Board("r1bqkbnr/pppp1ppp/2n5/4p3/2B1P3/5Q2/PPPP1PPP/RNB1K1NR w KQkq - 0 1")
+    clock = ClockView(my_ms=180000, opponent_ms=180000, increment_ms=2000, ply=10)
+
+    move = baseline.choose_move(board, clock)
+
+    board.push(move)
+    assert board.is_checkmate(), f"baseline played {move} instead of the mate on f7"

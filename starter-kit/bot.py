@@ -19,10 +19,19 @@ PIECE_VALUES = {
 }
 
 
-def evaluate_position(board: chess.Board) -> int:
-    """Simple material count from current player's perspective."""
+MATE_SCORE = 20000
+
+
+def evaluate_position(board: chess.Board, perspective: chess.Color) -> int:
+    """Material count in centipawns, always from `perspective`'s point of view.
+
+    The perspective is fixed rather than taken from `board.turn` because minimax
+    returns terminal positions immediately, before any min/max flip can correct
+    the sign. Scored from whoever happens to be to move, delivering checkmate
+    comes back as -20000 and the bot avoids winning.
+    """
     if board.is_checkmate():
-        return -20000
+        return -MATE_SCORE if board.turn == perspective else MATE_SCORE
     if board.is_stalemate() or board.is_insufficient_material():
         return 0
     
@@ -31,7 +40,7 @@ def evaluate_position(board: chess.Board) -> int:
         piece = board.piece_at(square)
         if piece:
             value = PIECE_VALUES.get(piece.piece_type, 0)
-            if piece.color == board.turn:
+            if piece.color == perspective:
                 score += value
             else:
                 score -= value
@@ -39,16 +48,23 @@ def evaluate_position(board: chess.Board) -> int:
     return score
 
 
-def minimax(board: chess.Board, depth: int, alpha: int, beta: int, maximizing: bool) -> int:
-    """Minimax with alpha-beta pruning."""
+def minimax(
+    board: chess.Board,
+    depth: int,
+    alpha: int,
+    beta: int,
+    maximizing: bool,
+    perspective: chess.Color
+) -> int:
+    """Minimax with alpha-beta pruning, scored for `perspective` throughout."""
     if depth == 0 or board.is_game_over():
-        return evaluate_position(board)
+        return evaluate_position(board, perspective)
     
     if maximizing:
         max_eval = float('-inf')
         for move in board.legal_moves:
             board.push(move)
-            eval_score = minimax(board, depth - 1, alpha, beta, False)
+            eval_score = minimax(board, depth - 1, alpha, beta, False, perspective)
             board.pop()
             max_eval = max(max_eval, eval_score)
             alpha = max(alpha, eval_score)
@@ -59,7 +75,7 @@ def minimax(board: chess.Board, depth: int, alpha: int, beta: int, maximizing: b
         min_eval = float('inf')
         for move in board.legal_moves:
             board.push(move)
-            eval_score = minimax(board, depth - 1, alpha, beta, True)
+            eval_score = minimax(board, depth - 1, alpha, beta, True, perspective)
             board.pop()
             min_eval = min(min_eval, eval_score)
             beta = min(beta, eval_score)
@@ -101,13 +117,14 @@ def choose_move(board: chess.Board, clock: ClockView) -> chess.Move:
         return list(board.legal_moves)[0]
     
     # Search depth 2 (our move + opponent's response)
+    perspective = board.turn
     best_move = None
     best_score = float('-inf')
     
     for move in board.legal_moves:
         board.push(move)
         # Maximize our position after opponent's best response
-        score = minimax(board, 1, float('-inf'), float('inf'), False)
+        score = minimax(board, 1, float('-inf'), float('inf'), False, perspective)
         board.pop()
         
         if score > best_score:
