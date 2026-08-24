@@ -360,9 +360,29 @@ def test_arena_computes_statistics():
     stats = compute_statistics(move_times)
     
     assert stats['mean'] == 155.0  # sum / count
-    assert stats['p95'] == 300  # 95th percentile (9th value in sorted list)
+    # 0.95 * (10 - 1) = 8.55, so 55% of the way from 200 to 300.
+    assert stats['p95'] == pytest.approx(255.0)
     assert stats['min'] == 90
     assert stats['max'] == 300
+
+
+def test_p95_is_not_just_the_slowest_move():
+    """p95 must not collapse onto the maximum for the sample sizes we print.
+
+    Indexing at int(0.95 * n) is the maximum for every n <= 20, and a arena run
+    reports p95 next to prose telling an attendee to reduce their search depth.
+    One hitched move should not read as a systematic problem.
+    """
+    from arena import compute_statistics
+
+    one_slow_move = [10] * 19 + [5000]
+    stats = compute_statistics(one_slow_move)
+
+    assert stats['max'] == 5000
+    assert stats['p95'] < stats['max'], "p95 is reporting the slowest move"
+    # Same value as statistics.quantiles(method='inclusive'), the standard
+    # linear-interpolation percentile.
+    assert stats['p95'] == pytest.approx(259.5)
 
 
 def test_arena_tracks_elo():
@@ -564,7 +584,7 @@ def test_arena_exports_pgn(tmp_path):
     from arena import export_to_pgn
 
     pgn_path = tmp_path / "games.pgn"
-    export_to_pgn([_scholars_mate_result()], str(pgn_path), tracker=None)
+    export_to_pgn([_scholars_mate_result()], str(pgn_path))
 
     pgn_content = pgn_path.read_text()
 
@@ -574,16 +594,61 @@ def test_arena_exports_pgn(tmp_path):
     assert "1-0" in pgn_content
 
 
-def test_export_to_pgn_includes_ratings_from_tracker(tmp_path):
-    """Ratings reach the PGN headers when a tracker is supplied."""
-    from arena import export_to_pgn, ArenaTracker
+def test_export_to_pgn_uses_the_rating_each_game_was_played_at(tmp_path):
+    """Game 1's header shows what its players were rated in game 1.
 
-    tracker = ArenaTracker()
-    tracker.register_bot("Bot1")
-    tracker.register_bot("Bot2")
+    Ratings used to be read from the tracker at export time, so every game in
+    the file was stamped with the final standings and the PGN said the ladder
+    started where it ended.
+    """
+    from dataclasses import replace
+    from arena import export_to_pgn
+
+    first = replace(_scholars_mate_result(), white_rating=1200, black_rating=1200)
+    second = replace(_scholars_mate_result(), white_rating=1216, black_rating=1184)
 
     pgn_path = tmp_path / "games.pgn"
-    export_to_pgn([_scholars_mate_result()], str(pgn_path), tracker=tracker)
+    export_to_pgn([first, second], str(pgn_path))
+    text = pgn_path.read_text()
+
+    assert '[WhiteElo "1200"]' in text
+    assert '[WhiteElo "1216"]' in text
+    assert '[BlackElo "1184"]' in text
+
+
+def test_arena_run_stamps_each_game_with_its_own_ratings(tmp_path):
+    """The same, through main(): the first game is always played at 1200 apiece."""
+    import re
+    from arena import main
+
+    pgn_path = tmp_path / "games.pgn"
+    main([
+        '--bots',
+        str(STARTER_KIT / "ref_bots" / "ref_random.py"),
+        str(STARTER_KIT / "ref_bots" / "ref_greedy.py"),
+        '--games', '4', '--seed', '21', '--pgn', str(pgn_path),
+    ])
+
+    elos = re.findall(r'\[WhiteElo "(\d+)"\]', pgn_path.read_text())
+    assert len(elos) == 4
+    assert elos[0] == "1200", f"game 1 was stamped {elos[0]}, not the rating it was played at"
+    assert len(set(elos)) > 1, "every game carries the same rating"
+
+
+def test_export_to_pgn_includes_ratings_from_tracker(tmp_path):
+    """Ratings reach the PGN headers when the game carries them."""
+    from dataclasses import replace
+    from arena import export_to_pgn
+    from chess_core import STARTING_RATING
+
+    result = replace(
+        _scholars_mate_result(),
+        white_rating=STARTING_RATING,
+        black_rating=STARTING_RATING,
+    )
+
+    pgn_path = tmp_path / "games.pgn"
+    export_to_pgn([result], str(pgn_path))
 
     assert "WhiteElo" in pgn_path.read_text()
 
@@ -596,7 +661,7 @@ def test_export_to_pgn_rejects_unknown_result(tmp_path):
     broken = replace(_scholars_mate_result(), result="white_resigned")
 
     with pytest.raises(ValueError) as excinfo:
-        export_to_pgn([broken], str(tmp_path / "games.pgn"), tracker=None)
+        export_to_pgn([broken], str(tmp_path / "games.pgn"))
 
     assert "white_resigned" in str(excinfo.value)
 
@@ -607,7 +672,7 @@ def test_arena_replay_round_trips_exported_pgn(tmp_path, capsys):
     from arena import export_to_pgn, main
 
     pgn_path = tmp_path / "games.pgn"
-    export_to_pgn([_scholars_mate_result()], str(pgn_path), tracker=None)
+    export_to_pgn([_scholars_mate_result()], str(pgn_path))
 
     main(['--replay', '1', '--pgn', str(pgn_path)])
 
@@ -623,7 +688,7 @@ def test_arena_replay_out_of_range_errors_actionably(tmp_path, capsys):
     from arena import export_to_pgn, main
 
     pgn_path = tmp_path / "games.pgn"
-    export_to_pgn([_scholars_mate_result()], str(pgn_path), tracker=None)
+    export_to_pgn([_scholars_mate_result()], str(pgn_path))
 
     with pytest.raises(SystemExit):
         main(['--replay', '99', '--pgn', str(pgn_path)])
@@ -746,7 +811,7 @@ def test_arena_exports_and_replays_a_game_from_an_opening(tmp_path):
     assert result.opening_fen == opening
 
     pgn_path = tmp_path / "games.pgn"
-    export_to_pgn([result], str(pgn_path), tracker=None)
+    export_to_pgn([result], str(pgn_path))
 
     text = pgn_path.read_text()
     assert '[SetUp "1"]' in text

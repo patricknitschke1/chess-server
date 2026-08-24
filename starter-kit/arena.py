@@ -60,6 +60,8 @@ class GameResult:
     black_illegal_attempts: int
     ply_count: int
     opening_fen: Optional[str] = None  # None means the standard starting position
+    white_rating: Optional[int] = None  # rating each side held when this game was played
+    black_rating: Optional[int] = None
 
 
 def run_single_game(
@@ -336,11 +338,18 @@ def compute_statistics(values: List[int]) -> Dict[str, float]:
         return {'mean': 0.0, 'p95': 0, 'min': 0, 'max': 0}
     
     sorted_values = sorted(values)
-    p95_index = int(len(sorted_values) * 0.95)
+    
+    # Linear interpolation between the two neighbouring samples. Indexing at
+    # int(0.95 * n) returns the slowest move outright for any n <= 20, so a
+    # single hitch would have been printed to an attendee as their p95.
+    position = 0.95 * (len(sorted_values) - 1)
+    lower = int(position)
+    upper = min(lower + 1, len(sorted_values) - 1)
+    p95 = sorted_values[lower] + (sorted_values[upper] - sorted_values[lower]) * (position - lower)
     
     return {
         'mean': statistics.mean(values),
-        'p95': sorted_values[p95_index] if p95_index < len(sorted_values) else sorted_values[-1],
+        'p95': p95,
         'min': min(values),
         'max': max(values)
     }
@@ -435,14 +444,12 @@ _ARENA_RESULT_TO_CORE = {
 }
 
 
-def export_to_pgn(
-    results: List[GameResult],
-    filepath: str,
-    tracker: Optional['ArenaTracker'] = None
-):
+def export_to_pgn(results: List[GameResult], filepath: str):
     """Write game results to a PGN file, one game after another.
 
-    Ratings are included in the headers when a tracker is supplied.
+    Each game carries the ratings its players held at the time it was played,
+    which is what a rating header means. Reading them from the tracker at export
+    time stamped game 1 with the final standings.
     """
     with open(filepath, 'w') as f:
         for result in results:
@@ -453,16 +460,13 @@ def export_to_pgn(
                     f"Expected one of: {', '.join(sorted(_ARENA_RESULT_TO_CORE))}."
                 )
 
-            white_rating = tracker.get_rating(result.white_name) if tracker else None
-            black_rating = tracker.get_rating(result.black_name) if tracker else None
-
             f.write(san_list_to_pgn(
                 result.moves_san,
                 result.white_name,
                 result.black_name,
                 core_result,
-                white_rating,
-                black_rating,
+                result.white_rating,
+                result.black_rating,
                 result.opening_fen,
             ))
             f.write("\n\n")
@@ -781,6 +785,10 @@ def main(argv=None):
             opening_fen=select_opening(rng),
             verbose=args.verbose,
         )
+        # Read before record_game, so the headers show what each side was rated
+        # going into this game rather than where the tournament finished.
+        result.white_rating = tracker.get_rating(white_name)
+        result.black_rating = tracker.get_rating(black_name)
         all_results.append(result)
 
         tracker.record_game(white_name, black_name, result.result)
@@ -797,7 +805,7 @@ def main(argv=None):
     print_results(tracker, bot_names, args.seed, len(all_results))
 
     if args.pgn:
-        export_to_pgn(all_results, args.pgn, tracker)
+        export_to_pgn(all_results, args.pgn)
         print(f"{len(all_results)} games written to {args.pgn}")
         print(f"Watch one back with: python arena.py --replay 1 --pgn {args.pgn}")
 
