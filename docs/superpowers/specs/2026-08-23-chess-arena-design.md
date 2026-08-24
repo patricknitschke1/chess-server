@@ -358,7 +358,13 @@ Every terminal transition deletes both `seats` rows in the same transaction.
 
 **Order matters and is stated relative to the socket, not the ticker:** recovery runs in the FastAPI lifespan startup hook, **before the listening socket accepts connections**. Otherwise a fast-reconnecting bot can be paired into a game that recovery is about to abort.
 
-Recovery marks every `pending`/`active` game `aborted`, `termination='server_restart'`, `rated=0`, deletes all `seats` rows, clears all mailboxes, and assigns a new **run id** (§14). Bots re-poll, get "no game", and are re-paired within a tick.
+Recovery marks every `pending`/`active` game `aborted`, `termination='server_restart'`, `rated=0`, deletes all `seats` rows, clears all mailboxes, and assigns a new **run id** (§14).
+
+**Recovery must also clear every persisted monotonic-derived field.** `time.monotonic_ns()` has no meaning across a process restart — its zero point moves — so any stored `*_mono` value is comparing against a clock that no longer exists. On a machine whose new baseline is *lower* than the old one, `now_mono - last_poll_mono` goes negative and every bot ever registered looks like it is actively polling. Recovery therefore nulls `last_poll_mono` and `last_agent_action_mono`, and resets `controller` to its default — otherwise an attendee who called `take_control()` before the restart is locked out of their own bot for the rest of the day, with nothing logged.
+
+This is why `_mono` values may only be compared with other `_mono` values taken in the same process, and why nothing may persist a monotonic deadline across a restart. Wall-clock timestamps are fine to persist; monotonic ones are not.
+
+Bots re-poll, get "no game", and are re-paired within a tick.
 
 ~20 seconds of lost play, zero rating damage, and restarting becomes a **safe operator action** — which matters, because you will restart during the workshop.
 
@@ -516,6 +522,21 @@ Sorting by `games_played` first means new bots play within seconds. Sorting by r
 
 An anchor is paired only when a competitor would otherwise sit idle, is offered to the **fewest-games** eligible bot, and only when `|rating − anchor_rating| ≤ 400`. Beyond 400 the game is a foregone conclusion and the rating delta is negligible, so it is wasted board time.
 
+**Anchors carry `role='anchor'`.** Not `competitor` — that would put them on the leaderboard and subject them to the one-competitor-per-owner rule. `role='anchor'` is not registrable over HTTP; anchors are seeded at startup with `is_anchor=1`. §9.1's pool filter admits `role IN ('competitor','anchor')`; every other consumer (leaderboard, rating updates, the one-per-owner check) filters to `competitor`.
+
+**`should_offer_anchor` must be called.** `pair_bots` only prevents anchor-vs-anchor pairing; every other §9.3 rule — idle-only, fewest-games, ±400 — lives in `should_offer_anchor`. A pairing loop that calls `pair_bots` alone enforces none of them.
+
+**Anchors need an execution path, because they have no HTTP client.** Delivery has exactly two call sites, both client-driven, so an anchor's position is never delivered and §6.3 aborts the game `no_show` after 15 seconds. The ticker therefore gains a step, between pairing and the delivery-grace sweep: for every active game whose side to move is an anchor, call that bot's `choose_move` in-process and apply the move through the same locked move path a client's move takes. **The in-process call is itself the delivery** — there is no separate deliver-then-wait for a bot that cannot poll.
+
+This is the one place trusted in-process code plays a game, and it is why `reference_bots.py` is the single exception to "no untrusted code runs on the server". Without this step the three reference bots are dead code and a lone attendee never gets a game.
+
+### 9.4 Where the pool snapshot's history fields live
+
+`PoolEntry` carries `last_color`, `white_count`, `last_opponent_id` and `unpaired_ticks`. None is a `games` column, and a builder who cannot find them will pass zeros — at which point `unpaired_ticks` is permanently 0, `_allowed` never relaxes, and §9.2's own motivating case (a lone attendee with two bots) never pairs. Nothing errors: the bots poll happily and `active_games` sits at 0.
+
+- `last_color`, `white_count`, `last_opponent_id` are **denormalised onto `bots`** and updated in the same transaction that finalises a game. Deriving them from `games` per tick is an O(games) scan three times over, and three builders would derive them three ways.
+- `unpaired_ticks` is **in-process state**, a `dict[bot_id, int]` owned by the ticker, incremented for every pooled bot that ends a tick unpaired and reset to 0 on pairing. It is per-run by nature and §7.1 discards it anyway.
+
 ---
 
 ## 10. Rating
@@ -527,6 +548,8 @@ An anchor is paired only when a competitor would otherwise sit idle, is offered 
 ### 10.2 Application
 
 Ratings are computed and applied inside the same transaction that finalises the game, guarded by `UNIQUE (game_id, bot_id)`. `bots.rating` must equal 1200 plus the sum of that bot's deltas; `GET /admin/consistency` asserts this and startup logs loudly on mismatch.
+
+**The consistency check applies to competitors only.** An anchor's rating is fixed and it accrues no `rating_history` rows, so `1200 + sum(deltas)` is false for every anchor by construction — checking them would leave the one alarm that catches double-rating permanently red on a healthy server, which is the same as having no alarm. Anchors also get no `rating_history` row from a one-sided exchange: only the competitor's rating moved, so only the competitor has a delta to record.
 
 ### 10.3 Anchors
 
@@ -806,6 +829,8 @@ Phases 2 and 4 are genuine stopping points. Phase 3 is split at the store/API bo
 
 What is **not** deferred, because the server depends on it: the bots' existence and identity, `role='anchor'` handling, anchor gating at ±400 (§9.3), and one-sided rating against anchors (§10.3). Those are architecture; the numbers are content.
 
+**Deferred — the whole `arena_reports` vertical.** Its only producer is `arena.py --report`, which is deferred with the arena surface. Building the consumer without the producer means a table, a repository, retention pruning, semantic validation, two routes and an SSE event with nothing to exercise them — the largest block of server surface with zero clients, including a retention `ORDER BY` that has now been got wrong twice. Deferred as a unit: it returns with the dashboard panel that renders it, not with the schema. `arena_reports` remains display-only whenever it does return — no rating, matchmaking, leaderboard, seat or finalisation code may ever read it.
+
 **Accepted limits:** flag/abandonment detection resolves at one tick (~1s); a crash loses ~20s of play; one-sided anchor rating injects a small, self-limiting number of points; SQLite plus a global lock would be wrong at 10× scale.
 
 ---
@@ -817,3 +842,5 @@ Standard results come from `python-chess`. Threefold and fifty-move are **claime
 **Adjudication is a flat cap:** at **200 ply** the game ends `adjudicated`, result **draw**, unconditionally. Revision 1's material-based rule was bespoke, semantically undefined, and nearly unreachable at 3+2.
 
 No draw offers. A dead-drawn ending reaches the cap or flags; at blitz that is acceptable and avoids an entire negotiation protocol.
+
+**`crash` is arena-local and has no server-side producer.** Offline, the arena catches the exception a bot raises and can say so exactly. On the server a bot that crashes is indistinguishable from one that closed its laptop — both simply stop polling — so the server terminates it as `abandoned` (mid-game) or `no_show` (before the first move). The server must never write `crash`. It stays in `TerminationReason` because `chess_core` is shared and the arena needs it, and because "bot raised" and "bot played an illegal move" send an attendee to two different places.
