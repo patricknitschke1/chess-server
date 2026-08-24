@@ -9,10 +9,11 @@ from chess_core import (
     STARTING_RATING,
     TerminationReason,
 )
-from chess_server.store.recovery import recover
+from chess_server.engine import state
+from chess_server.store.recovery import recover, recover_locked
 from chess_server.store.repositories import BotRepo, ChallengeRepo, GameRepo, SeatRepo
 from chess_server.store.run import current_run_id
-from chess_server.store.txn import reset_seq
+from chess_server.store.txn import critical_section, reset_seq
 
 OLD_MONO = 900_000_000_000_000  # a baseline from a process that no longer exists
 WALL = "2026-08-24T08:00:00Z"
@@ -237,3 +238,42 @@ async def test_recovery_opens_exactly_one_transaction(store, repos):
 
     assert [s for s in recorder.statements if s.startswith("BEGIN")] == ["BEGIN IMMEDIATE"]
     assert [s for s in recorder.statements if s == "COMMIT"] == ["COMMIT"]
+
+
+class _Boom(Exception):
+    pass
+
+
+def _populate_engine_state():
+    state.mailbox[1] = "payload"
+    state.history[1] = ["fen"]
+    state.unpaired_ticks[1] = 3
+    state.connected.add(1)
+
+
+def _engine_state_sizes():
+    return [len(state.mailbox), len(state.history), len(state.unpaired_ticks),
+            len(state.connected)]
+
+
+async def test_recovery_clears_every_engine_container(store, repos):
+    await _dirty_database(repos)
+    _populate_engine_state()
+
+    await _recover(store, cleared=state.clear_all)
+
+    assert _engine_state_sizes() == [0, 0, 0, 0]
+
+
+async def test_a_rolled_back_recovery_leaves_engine_state_alone(store, repos):
+    """The clear is deferred past the commit, so a failed recovery must not wipe
+    in-process state that the database still matches."""
+    await _dirty_database(repos)
+    _populate_engine_state()
+
+    with pytest.raises(_Boom):
+        async with critical_section(store.writer, store.executor) as txn:
+            await recover_locked(txn, RESTART_WALL, state.clear_all)
+            raise _Boom
+
+    assert _engine_state_sizes() == [1, 1, 1, 1]

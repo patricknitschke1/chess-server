@@ -3,6 +3,7 @@ import asyncio
 import pytest
 
 from chess_core import STARTING_RATING
+from chess_server.engine import state
 from chess_server.engine.deps import EngineDeps
 from chess_server.store import txn
 from chess_server.store.db import open_store
@@ -24,6 +25,13 @@ def _fresh_write_lock(monkeypatch):
 @pytest.fixture(autouse=True)
 def _fresh_seq():
     reset_seq()
+
+
+@pytest.fixture(autouse=True)
+def _fresh_engine_state():
+    """Emptied field by field rather than through clear_all, which is under test."""
+    for container in (state.mailbox, state.history, state.unpaired_ticks, state.connected):
+        container.clear()
 
 
 @pytest.fixture
