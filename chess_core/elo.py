@@ -1,0 +1,128 @@
+"""Elo rating calculations per §10.
+
+K=24 flat for all bots. Exchange is zero-sum and symmetric for
+competitor-vs-competitor games.
+"""
+from chess_core.types import RatingUpdate
+
+
+STARTING_RATING = 1200
+K_FACTOR = 24
+
+
+def compute_rating_exchange(
+    winner_rating: int,
+    loser_rating: int
+) -> tuple[RatingUpdate, RatingUpdate]:
+    """Compute two-sided Elo exchange for a decisive game, K=24 flat per §10.1.
+    
+    Exchange is zero-sum and symmetric.
+    
+    Args:
+        winner_rating: Winner's current rating
+        loser_rating: Loser's current rating
+    
+    Returns:
+        (winner_update, loser_update) where winner gains and loser loses
+    """
+    # Expected scores
+    winner_expected = 1 / (1 + 10 ** ((loser_rating - winner_rating) / 400))
+    loser_expected = 1 - winner_expected
+    
+    # Actual scores (1 for winner, 0 for loser)
+    winner_actual = 1.0
+    loser_actual = 0.0
+    
+    # Deltas - force exact zero-sum by negating
+    winner_delta = round(K_FACTOR * (winner_actual - winner_expected))
+    loser_delta = -winner_delta
+    
+    winner_update = RatingUpdate(
+        rating_before=winner_rating,
+        rating_after=winner_rating + winner_delta,
+        delta=winner_delta
+    )
+    
+    loser_update = RatingUpdate(
+        rating_before=loser_rating,
+        rating_after=loser_rating + loser_delta,
+        delta=loser_delta
+    )
+    
+    return winner_update, loser_update
+
+
+def compute_draw_exchange(
+    white_rating: int,
+    black_rating: int
+) -> tuple[RatingUpdate, RatingUpdate]:
+    """Compute two-sided Elo exchange for a draw, K=24 flat per §10.1.
+    
+    Exchange is zero-sum and symmetric.
+    
+    Args:
+        white_rating: White's current rating
+        black_rating: Black's current rating
+    
+    Returns:
+        (white_update, black_update) summing to zero delta
+    """
+    # Expected scores
+    white_expected = 1 / (1 + 10 ** ((black_rating - white_rating) / 400))
+    black_expected = 1 - white_expected
+    
+    # Actual scores (0.5 for each in a draw)
+    white_actual = 0.5
+    black_actual = 0.5
+    
+    # Deltas - force exact zero-sum by negating
+    white_delta = round(K_FACTOR * (white_actual - white_expected))
+    black_delta = -white_delta
+    
+    white_update = RatingUpdate(
+        rating_before=white_rating,
+        rating_after=white_rating + white_delta,
+        delta=white_delta
+    )
+    
+    black_update = RatingUpdate(
+        rating_before=black_rating,
+        rating_after=black_rating + black_delta,
+        delta=black_delta
+    )
+    
+    return white_update, black_update
+
+
+def compute_one_sided_exchange(
+    competitor_rating: int,
+    anchor_rating: int,
+    competitor_won: bool
+) -> RatingUpdate:
+    """Compute one-sided Elo update against a fixed anchor per §10.3.
+    
+    Anchor rating never changes. Net injection into pool per game, but
+    shrinks toward zero as competitor approaches anchor rating.
+    
+    Args:
+        competitor_rating: Competitor's current rating
+        anchor_rating: Fixed anchor rating
+        competitor_won: True if competitor won, False if lost
+    
+    Returns:
+        RatingUpdate for competitor only
+    """
+    # Expected score for competitor
+    expected = 1 / (1 + 10 ** ((anchor_rating - competitor_rating) / 400))
+    
+    # Actual score
+    actual = 1.0 if competitor_won else 0.0
+    
+    # Delta
+    delta = round(K_FACTOR * (actual - expected))
+    
+    return RatingUpdate(
+        rating_before=competitor_rating,
+        rating_after=competitor_rating + delta,
+        delta=delta
+    )
