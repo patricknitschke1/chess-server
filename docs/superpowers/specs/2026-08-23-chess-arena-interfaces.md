@@ -216,6 +216,11 @@ def detect_termination(fen: str, history_fens: List[str]) -> tuple[bool, Optiona
     python-chess can_claim_draw). Threefold detection compares
     position_key(fen) values, not full FEN strings.
     
+    This answers "is this POSITION terminal?" only. The §22 200-ply cap is a
+    game-length rule, not a position rule, and lives in match.py where ply is
+    part of the state — see transition_after_move. Keeping it out of here is
+    what lets this function stay a pure function of the position.
+    
     Args:
         fen: Current position in FEN notation
         history_fens: All FENs in game history for threefold detection

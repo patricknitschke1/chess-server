@@ -1672,8 +1672,6 @@ def main():
     
     # Print results
     print_results(tracker, bot_names, args.seed, game_count)
-    
-    # TODO: PGN export will be added in next task
 
 
 if __name__ == '__main__':

@@ -1160,6 +1160,43 @@ def test_deliver_position_idempotent():
     assert redelivered.delivered_to_mover == 1
 
 
+def test_rejected_move_does_not_reset_clock():
+    """A rejected move leaves the clock baseline untouched per §8.3.
+
+    The bot is delivered a position at T0, submits an illegal move at T0+5s,
+    then a legal move at T0+9s. It must be charged the full 9 seconds, not the
+    4 seconds since its rejected attempt. Without this, an illegal-move loop is
+    a free clock stop and a buggy bot outlives a correct one.
+    """
+    delivered_at = 1_000_000_000
+    state = ClockState(
+        white_ns=180_000_000_000,
+        black_ns=180_000_000_000,
+        time_control_ns=180_000_000_000,
+        increment_ns=2_000_000_000,
+        to_move=Color.WHITE,
+        to_move_since_mono=delivered_at,
+        turn_started_mono=delivered_at,
+        delivered_to_mover=1,
+    )
+
+    # An illegal move is rejected by rules.validate_and_apply_move and the caller
+    # never touches the clock: no deliver_position, no account_move_and_switch.
+    after_rejection = state
+    assert after_rejection.turn_started_mono == delivered_at
+
+    # Re-delivery during the same turn must also not move the baseline (§6.2).
+    after_rejection = clock.deliver_position(after_rejection, delivered_at + 5_000_000_000, 0)
+    assert after_rejection.turn_started_mono == delivered_at
+
+    # The eventual legal move is charged from the original delivery instant.
+    result = clock.account_move_and_switch(after_rejection, delivered_at + 9_000_000_000)
+    assert result.elapsed_ns == 9_000_000_000
+    assert result.flagged is False
+    # 180s - 9s + 2s increment
+    assert result.clock.white_ns == 173_000_000_000
+
+
 # Delivery timeout tests
 
 def test_check_delivery_timeout_at_grace():
@@ -2365,6 +2402,90 @@ def test_transition_after_move_increments_ply():
     assert new_state.result is None
 
 
+def test_transition_after_move_adjudicates_at_ply_cap():
+    """Reaching PLY_CAP ends the game as a draw, unconditionally, per §22.
+
+    The cap is deliberately not material-based: the position may be completely
+    winning for one side and it is still a draw. That is the whole point of
+    replacing revision 1's "draw if within a pawn" rule — no judgement call,
+    no bespoke evaluation, one line.
+    """
+    state = match.MatchState(
+        status=GameStatus.ACTIVE,
+        ply=PLY_CAP - 1,
+        result=None,
+        termination=None
+    )
+
+    # A non-terminal move by a side that is winning on material.
+    move_result = MoveResult(
+        fen_after="4k3/8/8/8/8/8/8/3QK3 b - - 0 100",
+        san="Qd1",
+        is_terminal=False,
+        termination=None,
+        result=None
+    )
+
+    new_state = match.transition_after_move(state, move_result)
+
+    assert new_state.status == GameStatus.FINISHED
+    assert new_state.ply == PLY_CAP
+    assert new_state.termination == TerminationReason.ADJUDICATED
+    assert new_state.result == GameResult.DRAW
+
+
+def test_transition_after_move_does_not_adjudicate_below_cap():
+    """One ply short of the cap, play continues."""
+    state = match.MatchState(
+        status=GameStatus.ACTIVE,
+        ply=PLY_CAP - 2,
+        result=None,
+        termination=None
+    )
+
+    move_result = MoveResult(
+        fen_after="4k3/8/8/8/8/8/8/3QK3 b - - 0 100",
+        san="Qd1",
+        is_terminal=False,
+        termination=None,
+        result=None
+    )
+
+    new_state = match.transition_after_move(state, move_result)
+
+    assert new_state.status == GameStatus.ACTIVE
+    assert new_state.ply == PLY_CAP - 1
+    assert new_state.termination is None
+
+
+def test_terminal_move_at_cap_keeps_its_own_termination():
+    """A checkmate delivered on the capping ply is checkmate, not adjudication.
+
+    Ordering matters: the terminal check precedes the cap check, so a game that
+    ends decisively on ply 200 records the real result rather than a draw.
+    """
+    state = match.MatchState(
+        status=GameStatus.ACTIVE,
+        ply=PLY_CAP - 1,
+        result=None,
+        termination=None
+    )
+
+    move_result = MoveResult(
+        fen_after="4k3/8/8/8/8/8/5PPP/6K1 b - - 0 100",
+        san="Qe8#",
+        is_terminal=True,
+        termination=TerminationReason.CHECKMATE,
+        result=GameResult.WHITE_WINS
+    )
+
+    new_state = match.transition_after_move(state, move_result)
+
+    assert new_state.status == GameStatus.FINISHED
+    assert new_state.termination == TerminationReason.CHECKMATE
+    assert new_state.result == GameResult.WHITE_WINS
+
+
 def test_transition_after_terminal_move_ends_game():
     """Terminal move transitions to finished."""
     state = match.MatchState(
@@ -2553,6 +2674,15 @@ def transition_after_move(
             ply=new_ply,
             result=move_result.result,
             termination=move_result.termination
+        )
+    elif new_ply >= PLY_CAP:
+        # §22: flat cap, unconditional draw. Deliberately not material-based —
+        # the position may be winning for either side and it is still a draw.
+        return MatchState(
+            status=GameStatus.FINISHED,
+            ply=new_ply,
+            result=GameResult.DRAW,
+            termination=TerminationReason.ADJUDICATED
         )
     else:
         return MatchState(
