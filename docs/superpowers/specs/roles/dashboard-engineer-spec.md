@@ -693,9 +693,11 @@ class GameClockState {
 
 ---
 
-## 7. Visual rules — rated green, unrated and local amber
+## 7. Visual rules — rated green, unrated amber
 
 **Invariant per AGENTS.md and agent definition:** Nobody should ever mistake a practice win for a ranked one.
+
+**Note (Harmonization Revision 4):** Local arena games (from `arena.py`) never reach the server—the arena runs entirely offline. The dashboard shows only server games. For local statistics, `arena.py --serve` (stretch goal) can launch a separate web view at `localhost:8001`.
 
 ### Color-coding
 
@@ -703,7 +705,6 @@ class GameClockState {
 |---|---|---|---|
 | Rated (`rated: true`) | `#4a934c` green | `#2d5f2e` green (15% opacity) | "RATED" |
 | Unrated (`rated: false`) | `#c9a500` amber | `#8b6f00` amber (15% opacity) | "UNRATED" |
-| Local arena (not from server) | `#c9a500` amber | `#8b6f00` amber (15% opacity) | "LOCAL" |
 
 **Application:**
 - Featured game board: border and badge top-right corner
@@ -770,11 +771,9 @@ class Dashboard {
 - On `game_created` if no game is currently featured
 - Periodic check every 30s (optional; allows switching from a finished game that held its 20s)
 
-### 7.1 Featured game selection policy — **REQUIRES DECISION**
+### 7.1 Featured game selection policy — **RESOLVED (Harmonization Revision 4)**
 
-**Interfaces doc Decision #8** flags this as an open question. The spec states minimum hold of 20s but does not define the selection policy.
-
-**Recommendation:** Feature the active game with the **highest sum of participant ratings**, held for at least 20s. Ties broken by lowest `game_id` (oldest game).
+**Resolution:** Feature the active game with the **highest sum of participant ratings** (white_rating + black_rating), held for at least 20s. Ties broken by lowest `game_id` (oldest game).
 
 **Rationale:**
 - Highest-rated participants = highest-stakes game = most interesting to watch
@@ -798,6 +797,57 @@ pickFeaturedGame() {
   
   return activeGames[0];
 }
+```
+
+**Server dependency resolved:** `ActiveGameSummary` now includes `white_rating` and `black_rating` (added in interfaces harmonization).
+
+### 7.2 Viewing any server game (click grid cells)
+
+**New requirement (Harmonization Revision 4):** In My Bot mode, the live games grid shows all active server games as small board thumbnails. **Clicking a grid cell makes that game the locally featured game** (client-side state only, not server-side).
+
+**Implementation:**
+```javascript
+// In dashboard.js
+gridCellClicked(game_id) {
+  this.locallyFeaturedGameId = game_id;  // Override server's featured_game_id locally
+  this.renderFeaturedGame();
+}
+
+getFeaturedGameId() {
+  return this.locallyFeaturedGameId || this.state.featured_game_id;
+}
+```
+
+**Persistence:** Use `sessionStorage` to remember the locally featured game across page refreshes within the same session. Clear on `server_run_started` (new run = new games).
+
+**UI affordance:** Highlight the selected grid cell with a border or shadow to show which game is currently featured locally.
+
+### 7.3 Identifying "my bot" without authentication
+
+**New requirement (Harmonization Revision 4):** Dashboard is unauthenticated and read-only, but attendees want to spot their own bot in grids and leaderboard. Use URL parameter `?bot=BotName` or `localStorage`.
+
+**Implementation:**
+```javascript
+// In dashboard.js constructor
+const urlParams = new URLSearchParams(window.location.search);
+this.myBotName = urlParams.get('bot') || localStorage.getItem('myBotName');
+
+if (this.myBotName) {
+  localStorage.setItem('myBotName', this.myBotName);  // Persist across refreshes
+}
+
+// Display "YOU" badge next to that bot in leaderboard and game grids
+renderLeaderboard() {
+  entries.forEach(entry => {
+    const isMe = entry.name === this.myBotName;
+    // ... add 'you-badge' class if isMe
+  });
+}
+```
+
+**URL share:** Attendees can share `http://localhost:8000?bot=MyBot` to pre-set their bot name on any browser.
+
+**No auth required:** This is display sugar only—no privileged data or actions, just visual highlighting.
 ```
 
 **Alternative policies (NOT recommended, but stated for completeness):**
@@ -1128,15 +1178,18 @@ You do **not** produce any HTTP endpoints, SSE events, or MCP tools. You are a r
 
 ---
 
-## 13. Requires decision
+## 13. All Decisions Resolved (Harmonization Revision 4)
 
-### Decision #1: Featured game selection policy (from Interfaces Decision #8)
+### Decision #1: Featured game selection policy (from Interfaces Decision #8) — **RESOLVED**
 
-**Issue:** §11 states minimum hold of 20s but does not define selection policy (highest-rated, longest-running, round-robin, random, etc.).
+**Resolution:** Feature the active game with the highest sum of participant ratings (white_rating + black_rating), held for ≥20s. Ties broken by lowest `game_id` (oldest).
 
-**Recommendation:** Feature the active game with the highest sum of participant ratings, held for ≥20s. Ties broken by lowest `game_id` (oldest). Deterministic, testable, self-correcting.
+**Server dependency resolved:** `ActiveGameSummary` now includes `white_rating` and `black_rating` fields in `GET /state` response (added during harmonization).
 
-**Blocked on:** Confirmation from orchestrator or `server-engineer`. If approved, also requires `server-engineer` to add `white_rating` and `black_rating` fields to `ActiveGameSummary` in `GET /state` response.
+**New requirements added in this revision:**
+1. **View any server game:** Clicking grid cells in My Bot mode makes that game locally featured (§7.2)
+2. **Identify "my bot":** URL param `?bot=BotName` or `localStorage` for visual highlighting (§7.3)
+3. **Local stats gap resolved:** Local arena games never reach server; `arena.py --serve` (stretch) provides separate local view
 
 ---
 
@@ -1169,12 +1222,16 @@ All 10 event types:
 - `GET /health` — heartbeat for health banner
 - `GET /events` — SSE stream
 
-**Requests to `server-engineer`:**
-1. Add `white_rating` and `black_rating` fields to `ActiveGameSummary` in `GET /state` response (required for featured game selection policy per Decision #1)
-2. Add `GET /bots/{id}/rating_history` endpoint returning last 20 `{game_id, rating_before, rating_after, delta, timestamp}` for My Bot mode rating sparkline (alternative: accumulate locally from `rating_changed` events, but that breaks if page loads mid-workshop)
+**Requests to `server-engineer` (all resolved in Harmonization Revision 4):**
+1. ✓ `white_rating` and `black_rating` fields in `ActiveGameSummary` (added to interfaces)
+2. ✓ `GET /bots/{id}/rating_history` endpoint (already in interfaces Part 5)
 
-**Requires Decision list:**
-1. **Featured game selection policy** (Decision #8 from Interfaces): Recommend highest sum of participant ratings, held ≥20s, ties broken by lowest `game_id`. Awaiting confirmation.
+**New requirements added in this revision:**
+1. Implement click-to-feature on live game grid cells (§7.2)
+2. Implement "my bot" identification via URL param `?bot=BotName` or `localStorage` (§7.3)
+3. Remove all "local amber" color-coding—dashboard shows server games only
+
+**All decisions resolved:** Featured game selection policy finalized (highest rating sum, 20s hold). No blockers remaining.
 
 ---
 
@@ -1183,7 +1240,8 @@ All 10 event types:
 **Blocked on:**
 - Phase 3b completion (`server-engineer`): `/state`, `/leaderboard`, `/health`, `/events` endpoints must exist
 - SSE event catalog implementation (`server-engineer`): all 10 event types emitting per Part 2
-- Decision #1 resolution: featured game selection policy
+
+**No longer blocked on:** All design decisions resolved in Harmonization Revision 4.
 
 **Enables:**
 - Workshop day (Phase 8): dashboard is the projector display and attendee monitor

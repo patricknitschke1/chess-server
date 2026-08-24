@@ -1,8 +1,8 @@
 # Chess Arena — Design
 
 **Date:** 2026-08-23
-**Revision:** 3 (addresses `agent-reports/2026-08-23-spec-review-round2.md`)
-**Status:** Phases 1–2 cleared to build; phase 3 cleared subject to review round 3
+**Revision:** 4 (harmonized across all role specs)
+**Status:** Phases 1–3 cleared to build; harmonization complete
 **Purpose:** A chess bot competition server for an agentic AI workshop (~20 attendees), doubling as a reference example of an agentic repository.
 
 **Companion document:** [2026-08-23-chess-arena-interfaces.md](2026-08-23-chess-arena-interfaces.md) pins the module boundaries this spec describes — `chess_core` signatures, the SSE event catalog, the bot/SDK surface, HTTP request/response models, MCP tool contracts, and test conventions. This spec says *what and why*; the interfaces document says *exactly what the seams look like*, so tracks can be built in parallel without inventing conflicting APIs. Where the two disagree, this spec wins and the interfaces document is corrected.
@@ -149,7 +149,9 @@ Its silent death stops pairing and flagging while the server still looks healthy
 All display timestamps are UTC wall clock. **All elapsed arithmetic uses `time.monotonic_ns()`** so an NTP step or a suspended lid cannot flag the board.
 
 **`bots`**
-`id, name UNIQUE, owner, token_hash INDEXED, role, rating, is_anchor, wins, losses, draws, games_played, controller, last_agent_action_mono, last_poll_at, last_poll_mono, created_at`
+`id, name UNIQUE, owner, token_hash INDEXED, role, rating, is_anchor, wins, losses, draws, games_played, controller DEFAULT 'client', last_agent_action_mono, last_poll_at, last_poll_mono, created_at`
+
+- `controller` ∈ `client | agent` — who controls the bot (§13.3)
 
 **`games`**
 `id, white_bot_id, black_bot_id, status, result, termination, fen, ply,
@@ -505,7 +507,15 @@ Two modes via a toggle (a deliberate product choice):
 - **Big Screen** — one featured game large, leaderboard rail, results ticker. Readable from the back of the room.
 - **My Bot** — leaderboard, live game grid, personal panel with rating sparkline and recent results.
 
-Rated games render **green**, unrated/local **amber**. Nobody should mistake a practice win for a ranked one.
+### Viewing any server game
+
+In My Bot mode, the live games grid shows all active server games as small board thumbnails. **Clicking a grid cell makes that game featured locally** (client-side state only, not server-side). This allows attendees to watch their own game or others' games without changing what appears on the projector's Big Screen mode.
+
+To identify "my bot" in the dashboard (which is unauthenticated and read-only): URL parameter `?bot=BotName` or localStorage. Display a "YOU" badge next to that bot in grids and leaderboard. No authentication required—this is display sugar only.
+
+Rated games render **green**, unrated **amber**. Nobody should mistake a practice win for a ranked one.
+
+**Local arena games** (from `arena.py`) never reach the server — the arena runs entirely offline. For local statistics visualization, `arena.py --serve` (stretch goal) can launch a local web server at `localhost:8001` showing that run's results. The main dashboard at `localhost:8000` shows only server games.
 
 **SSE:**
 

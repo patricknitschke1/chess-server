@@ -485,17 +485,15 @@ Right-aligned numbers, left-aligned names. Timing columns rounded to integers (n
 
 ---
 
-### Decision 2: Dashboard "view game" button or game detail page
+### Decision 2: Dashboard "view game" button or game detail page — **RESOLVED (Harmonization Revision 4)**
 
-**Issue:** `diagnosing-bot-losses.md` tells attendees to call `analyze_game(game_id)` via MCP, but does not say how to find `game_id` for their most recent loss. Spec §14 describes a dashboard with leaderboard and game grid, but does not specify whether game cells are clickable or show IDs.
+**Resolution:** Dashboard game grid cells in My Bot mode are clickable—clicking makes that game the locally featured game (client-side state only). Game IDs are visible in URL or debug mode. For finding their recent game IDs, attendees use MCP `get_my_bot()` → `current_game_id` for active games.
 
-**Affects:** `diagnosing-bot-losses.md` — if the dashboard shows game IDs or has a "view game" link, I reference that. If not, I must tell attendees to call `get_my_bot()` → get `current_game_id`, or list their recent games via... (no such endpoint exists as of Interfaces draft).
+**Affects:** `diagnosing-bot-losses.md` — reference the clickable grid cells and `get_my_bot()` MCP tool.
 
-**Recommendation:** Dashboard game grid cells are clickable, opening a detail view with game ID, PGN, and timing. This removes "how do I get the game_id?" as a question. Alternatively, add `GET /bots/me/recent_games` returning the last 10 games for the authenticated bot.
+**Owner:** dashboard-engineer (implemented in §7.2).
 
-**Who decides:** `dashboard-engineer` (owns the UI), or `server-engineer` if a new endpoint is needed.
-
-**Status:** Not blocking — I can write the skill assuming MCP `get_my_bot()` → `current_game_id` works, and revise if a better path ships.
+**Status:** RESOLVED — documented path exists for game ID discovery.
 
 ---
 
@@ -551,9 +549,9 @@ Right-aligned numbers, left-aligned names. Timing columns rounded to integers (n
 - From `client-engineer`: `choose_move` signature (Interfaces Part 3), `arena.py` CLI and output format, `run.py` registration/run flow, `ClockView` dataclass
 - From `mcp-engineer`: MCP tool signatures (Interfaces Part 6), `analyze_game` output format (PGN + timing table + event log), error message wording
 
-**Requires decision (5 items):**
+**Requires decision (5 items, 1 resolved, 4 non-blocking):**
 1. `arena.py` terminal output format (columns, precision) — **not blocking**
-2. Dashboard game ID discovery (clickable cells or new endpoint) — **not blocking**
+2. Dashboard game ID discovery (clickable cells or new endpoint) — **RESOLVED** (clickable grid cells in §7.2, MCP `get_my_bot()`)
 3. Opening book format (internal vs exposed) — **not blocking** (Decision 1 from Interfaces, restated here for completeness)
 4. Stretch goals — which attendee-facing agents/commands to ship — **explicitly deferred**
 5. Leaderboard "provisional" visual annotation — **not blocking**

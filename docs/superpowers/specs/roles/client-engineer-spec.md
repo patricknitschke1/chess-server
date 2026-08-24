@@ -399,6 +399,23 @@ R N B Q K B N R
 [Press Enter for next move, 'q' to quit]
 ```
 
+**`--serve` flag (Stretch Goal, added Harmonization Revision 4):**
+
+```bash
+python arena.py --bots bot.py baseline.py --games 100 --serve
+```
+
+**Purpose:** Resolves the "local stats gap" identified in harmonization—arena runs offline so the main dashboard never sees local games. With `--serve`, the arena launches a simple HTTP server at `localhost:8001` showing a minimal read-only web view of the just-completed arena run's results: ELO table, W/L/D records, and optionally a game viewer.
+
+**Implementation notes:**
+- Uses Python's `http.server.HTTPServer` with a simple HTML template, no JavaScript build step
+- Serves static results snapshot—arena must finish all games before starting the server
+- Separate from main dashboard at `localhost:8000` (which shows only live server games)
+- Not required for core workshop functionality—attendees can read terminal output instead
+- Does NOT POST results to the server (that would create an unverifiable attack vector against the rated leaderboard)
+
+**Why this matters:** Attendees running offline arena games want to see formatted results without cluttering the main projector dashboard with unverifiable local data.
+
 ---
 
 ## 4. Normative behaviour
@@ -857,7 +874,9 @@ This is the acceptance bar: if the shipped baseline fails this test, it is not s
 
 ---
 
-## 10. Requires decision
+## 10. Implementation Decisions (Non-Blocking)
+
+**Note (Harmonization Revision 4):** The following decisions affect internal implementation details but do not change interfaces or seams. All have recommendations; implementer may choose differently if reasoning is sound.
 
 ### 10.1 Opening book composition
 
@@ -961,12 +980,17 @@ This is the acceptance bar: if the shipped baseline fails this test, it is not s
 
 **Seams produced:**
 - `choose_move(board: chess.Board, clock: ClockView) -> chess.Move` — attendees and workshop-author both depend on this
-- `ArenaStats`, `HeadToHead`, `ArenaResult` — workshop-author's `diagnosing-bot-losses.md` assumes these exist
+- Implementation decisions (6 items, all non-blocking with recommendations):**
+1. Opening book composition (recommend: mainline only, §10.1)
+2. Shipped baseline bot depth (recommend: depth 2 material-only, §10.2)
+3. Re-poll interval when no game (recommend: immediate, long-poll provides backpressure, §10.3)
+4. Handling `choose_move` exceptions (recommend: resign immediately, log traceback, §10.4)
+5. `client_reported_ms` measurement (recommend: wall time, matches server charging, §10.5)
+6. Arena time control default (recommend: 3+2, local must predict live, §10.6)
 
-**Requires decision (5 items):**
-1. Opening book composition (recommend: mainline only)
-2. Shipped baseline bot depth (recommend: depth 2 material-only)
-3. Re-poll interval when no game (recommend: immediate, long-poll provides backpressure)
-4. Handling `choose_move` exceptions (recommend: resign immediately, log traceback)
+**New requirement (Harmonization Revision 4):**
+- `arena.py --serve` (stretch goal): Launch local web view at `localhost:8001` to show offline arena results, resolving the "local stats gap" without posting unverifiable data to the server (§3.4)
+
+**Document completeness:** This spec is self-contained and buildable. Implementation decisions have recommendations but do not block progress.g traceback)
 5. `client_reported_ms` measurement (recommend: wall time, matches server charging)
 6. Arena time control default (recommend: 3+2, local must predict live)

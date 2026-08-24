@@ -1723,9 +1723,9 @@ All tools use `Authorization: Bearer <token>` forwarded from `.mcp.json`.
 
 ---
 
-## Decisions Required
+## Decisions (All Resolved in Revision 4)
 
-The following design decisions are needed to complete the interfaces. Each represents a place where the spec is ambiguous or where a clean interface cannot be finalized without a choice the spec has not made:
+The following design decisions have been resolved during spec harmonization. Cross-references indicate which role spec owns implementation:
 
 ### 1. Opening book format for `arena.py`
 
@@ -1745,34 +1745,23 @@ The following design decisions are needed to complete the interfaces. Each repre
 
 ### 3. `controller` field initial value
 
-**Issue:** §13.3 defines `controller` transitions and states it is "per-bot and set under `write_lock`," but does not specify the initial value set at registration or whether it is a database column or runtime state.
+**Resolution:** `controller TEXT NOT NULL DEFAULT 'client'` added to `bots` table schema. Indexed for pool eligibility queries. Makes control state durable across restarts.
 
-**Recommendation:** Add `controller` to the `bots` table schema in §5, default `'client'`, indexed for pool eligibility queries. This makes it durable across restarts and queryable in a single pass.
-
-**Why it matters:** Affects `bots` table schema and store layer interface.
+**Owner:** server-engineer (schema), design spec §5 updated.
 
 ### 4. Exact SSE coalescing window for non-featured moves
 
 **Issue:** §14 states "non-featured move events are coalesced to ≤2 Hz" but does not specify the buffering/throttle mechanism (time-based batching vs. event count vs. per-game throttle).
 
-**Recommendation:** Per-game throttle: for any non-featured game, after emitting a `move_played` event, suppress further `move_played` events for that game for 500ms. Featured game moves bypass this entirely. Simple, prevents fast games from flooding, and "≤2 Hz" is approximate anyway.
+**Resolution:** Per-game 500ms throttle. After emitting a `move_played` event for a non-featured game, suppress further events for that game for 500ms. Featured games bypass throttling entirely. Simple, prevents fast games from flooding the SSE stream.
 
-**Why it matters:** Affects SSE emitter implementation and testing.
-
-### 5. MCP tool response format for `analyze_game`
+**Owner:** server-engineer (SSE emitter)
 
 **Issue:** §13.2 lists `analyze_game(game_id)` as returning "PGN, per-move server_elapsed_ms, and explicit flag / strike / forfeit markers" but does not specify whether this is structured JSON, annotated PGN with comments, or a plain-text report.
 
-**Recommendation:** Return Markdown-formatted text with three sections:
-1. PGN with standard headers
-2. Timing table (ply | move | server_ms | client_ms | remaining_ms)
-3. Event log (flags, strikes, forfeits with ply numbers)
+**Resolution:** Markdown with three sections: (1) PGN with headers, (2) timing table (ply | move | server_ms | client_ms | remaining_ms), (3) event log (flags, strikes, forfeits with ply numbers). Most readable in Claude transcripts, no PGN parser needed.
 
-This is most readable in a Claude transcript and requires no special PGN parser in the MCP tool.
-
-**Why it matters:** Affects MCP tool return type and attendee experience.
-
-### 6. Illegal move strike counter reset condition
+**Owner:** mcp-engineer (§5 specifies this in detail)
 
 **Issue:** §8.3 states "three strikes in one game forfeits" and mentions incrementing "the mover's strike counter," but does not specify when strikes reset (per-game vs. per-bot-lifetime) or which table column holds them.
 
@@ -1783,15 +1772,16 @@ This is most readable in a Claude transcript and requires no special PGN parser 
 ### 7. Leaderboard provisional annotation threshold
 
 **Issue:** §10.1 states "'Provisional' survives as a leaderboard annotation for bots under 10 games — display only, never arithmetic" but does not specify the exact threshold or whether it applies to the dashboard, MCP `get_leaderboard()`, or both.
+Resolution:** Per-game columns `white_strikes` and `black_strikes` in `games` table (already in §5 schema). Reset to 0 at game creation. Matches "three strikes in one game" semantics—mistakes in game N don't affect game N+1.
 
-**Recommendation:** Bots with `games_played < 10` are annotated `"is_provisional": true` in all leaderboard responses (API, MCP, SSE `rating_changed`). This is a computed field, not a column. Consistent across all surfaces.
-
-**Why it matters:** Affects API and MCP response schemas.
-
+**Owner:** server-engineer (move validation), chess-domain-engineer (strike counting logic if needed)
 ### 8. Dashboard featured game selection policy
 
 **Issue:** §11 states "the dashboard holds a featured game for at least 20s before switching" but does not define the selection policy (highest-rated participants, longest-running game, round-robin, random, etc.).
 
 **Recommendation:** Feature the active game with the highest sum of participant ratings, held for at least 20s. Ties broken by lowest `game_id` (oldest). This ensures high-stakes games are featured and is deterministic for testing.
+Resolution:** Bots with `games_played < 10` are annotated `"is_provisional": true` in all leaderboard responses (HTTP API, MCP, SSE `rating_changed`). Computed field, not a column. Consistent across all surfaces.
 
-**Why it matters:** Affects dashboard controller logic and SSE featured flag.
+**Owner:** server-engineer (API/SSE responses), mcp-engineer (MCP tool responses)Resolution:** Feature the active game with highest sum of participant ratings (white_rating + black_rating), held for at least 20s. Ties broken by lowest `game_id` (oldest). Deterministic, ensures high-stakes games are featured.
+
+**Owner:** dashboard-engineer (client-side selection logic). Server provides white_rating/black_rating in ActiveGameSummary (already in schema above)

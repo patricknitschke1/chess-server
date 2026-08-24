@@ -1116,86 +1116,45 @@ Your track is complete when:
 
 ---
 
-## 11. Requires Decision
+## 11. All Decisions Resolved (Harmonization Revision 4)
 
-The following design decisions are needed before implementation can proceed. Each represents a place where the spec is ambiguous or underspecified:
+The following design decisions were previously marked "Requires Decision" and have now been resolved during spec harmonization:
 
-### 11.1 `controller` Field Schema
+### 11.1 `controller` Field Schema — **RESOLVED**
 
-**Issue:** §13.3 defines `controller` transitions and states it is "per-bot and set under `write_lock`," but does not specify whether it is a database column or runtime state, or what its initial value is.
+**Resolution:** `controller TEXT NOT NULL DEFAULT 'client'` added to `bots` table schema in design spec §5. Makes control state durable across restarts and queryable in a single pass for pool eligibility.
 
-**Options:**
-1. Add `controller` column to `bots` table, default `'client'`, indexed for pool eligibility queries
-2. Keep it as runtime-only state in a dictionary
+**Action:** Add `controller` column to `bots` table in `store/schema.py`, default `'client'`, indexed.
 
-**Recommendation:** Option 1. This makes it durable across restarts and queryable in a single pass. Without this, pool eligibility would require scanning in-memory state or reconstructing from game state.
+### 11.2 SSE Coalescing Mechanism — **RESOLVED**
 
-**Impact:** Affects `bots` table schema in `store/schema.py` and all pool eligibility queries.
+**Resolution:** Per-game 500ms throttle. After emitting `move_played` for a non-featured game, suppress further events for that game for 500ms. Featured games bypass throttling.
 
-### 11.2 SSE Coalescing Mechanism
+**Action:** Implement per-game throttle map in `sse.py` emitter.
 
-**Issue:** §14 states "non-featured move events are coalesced to ≤2 Hz" but does not specify the buffering/throttle mechanism (time-based batching vs. per-game throttle).
+### 11.3 Illegal Move Strike Reset — **RESOLVED**
 
-**Options:**
-1. Per-game throttle: after emitting a `move_played` for a non-featured game, suppress further `move_played` for that game for 500ms
-2. Global time-based batching: collect all non-featured moves in a 500ms window, emit batch
-3. Event count throttle: emit at most one non-featured move per 2 events
+**Resolution:** Per-game columns `white_strikes` and `black_strikes` in `games` table (already in §5 schema). Reset to 0 at game creation. Mistakes in game N don't affect game N+1.
 
-**Recommendation:** Option 1. Simple, prevents fast games from flooding, and "≤2 Hz" is approximate anyway. Featured games bypass throttle entirely.
+**Action:** No schema change needed (columns already exist). Implement strike counting in `engine/runner.py` move validation.
 
-**Impact:** Affects `sse.py` emitter logic and testing.
+### 11.4 Featured Game Selection Policy — **DELEGATED TO DASHBOARD**
 
-### 11.3 Illegal Move Strike Reset
+**Resolution:** Dashboard owns the selection policy (highest sum of participant ratings, held 20s, ties broken by lowest game_id). Server provides `white_rating` and `black_rating` in `ActiveGameSummary` for dashboard to compute the sum.
 
-**Issue:** §8.3 states "three strikes in one game forfeits" but does not specify when strikes reset (per-game vs. per-bot-lifetime) or which table column holds them.
+**Action:** Add `white_rating` and `black_rating` fields to `ActiveGameSummary` in `GET /state` response. Dashboard computes featured game client-side.
 
-**Options:**
-1. Strikes are per-game columns `white_strikes` and `black_strikes` in `games` table (already present in §5), reset to 0 at game creation
-2. Strikes are per-bot cumulative counters in `bots` table
+### 11.5 MCP `analyze_game` Response Format — **OWNED BY MCP-ENGINEER**
 
-**Recommendation:** Option 1. Matches "in one game" semantics and avoids penalising a bot in game N+1 for mistakes in game N. The columns already exist in §5 data model.
+**Resolution:** Markdown with three sections: (1) PGN, (2) timing table, (3) event log. Specified in detail in mcp-engineer §5.
 
-**Impact:** Affects move validation in `engine/runner.py` and strike increment logic.
+**Action:** No server API change needed. MCP tool constructs Markdown from existing game data.
 
-### 11.4 Featured Game Selection Policy
+### 11.6 Leaderboard Provisional Threshold — **RESOLVED**
 
-**Issue:** §11 states "the dashboard holds a featured game for at least 20s before switching" but does not define the selection policy.
+**Resolution:** Computed field `is_provisional = (games_played < 10)` in all leaderboard responses (HTTP API, MCP, SSE `rating_changed`). No database column.
 
-**Options:**
-1. Highest sum of participant ratings, held for 20s, ties broken by lowest game_id
-2. Round-robin through active games
-3. Random selection
-4. Longest-running game
-
-**Recommendation:** Option 1. Ensures high-stakes games are featured, deterministic for testing, and matches spectator interest.
-
-**Impact:** Affects dashboard controller logic and SSE `is_featured` flag assignment.
-
-### 11.5 MCP `analyze_game` Response Format
-
-**Issue:** §13.2 lists `analyze_game(game_id)` as returning "PGN, per-move server_elapsed_ms, and explicit flag / strike / forfeit markers" but does not specify structured JSON, annotated PGN, or plain text.
-
-**Options:**
-1. Markdown-formatted text with three sections: PGN, timing table, event log
-2. Structured JSON with separate fields
-3. Annotated PGN with comments
-
-**Recommendation:** Option 1. Most readable in a Claude transcript, requires no special parser, and matches MCP best practices for human-readable output.
-
-**Impact:** Affects MCP tool response construction (belongs to mcp-engineer, but you emit the underlying data via API).
-
-### 11.6 Leaderboard Provisional Threshold and Representation
-
-**Issue:** §10.1 states "bots under 10 games" are annotated `"is_provisional": true` but does not confirm whether this applies to API, MCP, SSE, or is a computed field vs. column.
-
-**Options:**
-1. Computed field `is_provisional = (games_played < 10)` in all leaderboard responses (API, MCP, SSE)
-2. Database column set at registration and updated on game end
-3. Display-only in dashboard, not in API
-
-**Recommendation:** Option 1. Consistent across all surfaces, avoids stale column, trivial to compute.
-
-**Impact:** Affects `/leaderboard` response construction and SSE `rating_changed` event schema.
+**Action:** Add `is_provisional` boolean to `LeaderboardEntry` model, computed as `games_played < 10`.
 
 ---
 
@@ -1229,12 +1188,11 @@ The following design decisions are needed before implementation can proceed. Eac
 - `matchmaker.pair_bots`, `should_offer_anchor`, `ANCHOR_RATING_WINDOW`
 - `match.create_match`, `transition_to_active`, `transition_after_move`, `transition_to_terminal`, `is_terminal`, `can_transition`
 
-**"Requires decision" items:**
-1. `controller` field schema (recommendation: add to `bots` table, default 'client')
-2. SSE coalescing mechanism (recommendation: per-game 500ms throttle)
-3. Illegal move strike reset (recommendation: per-game columns, already in §5)
-4. Featured game selection policy (recommendation: highest rating sum, held 20s)
-5. MCP `analyze_game` response format (recommendation: Markdown with three sections — belongs to mcp-engineer, impacts API data exposure)
-6. Leaderboard provisional threshold representation (recommendation: computed field `games_played < 10`)
+**Action items from resolved decisions:**
+1. Add `controller TEXT NOT NULL DEFAULT 'client'` to `bots` table schema
+2. Add `white_rating` and `black_rating` to `ActiveGameSummary` in GET /state
+3. Add `is_provisional` computed field to `LeaderboardEntry` (games_played < 10)
+4. Implement per-game 500ms SSE throttle for non-featured move events
+5. Implement strike counting in move validation (per-game, already in schema)
 
-**Document completeness:** This spec is self-contained and buildable without re-reading the full design spec. Every behaviour, constraint, and failure mode is specified. The six decision items are the only blockers; all have recommendations.
+**Document completeness:** This spec is self-contained and buildable without re-reading the full design spec. Every behaviour, constraint, and failure mode is specified.

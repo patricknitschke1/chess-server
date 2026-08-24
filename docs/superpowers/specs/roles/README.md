@@ -1,9 +1,9 @@
 # Role Specs — Orchestrator Coverage Record
 
-**Date:** 2026-08-24
-**Commit at distillation:** `22db18c` (+ subsequent orchestrator fixes)
+**Date:** 2026-08-24 (Harmonization Revision 4)
+**Commit at harmonization:** `0167b91`
 
-Six role specs distilled from [the design spec](../2026-08-23-chess-arena-design.md) and [the interfaces document](../2026-08-23-chess-arena-interfaces.md), one per build track. Each is written to be built from without re-reading the design spec, and none may contradict it. Where they restate, they cite §.
+Six role specs distilled from [the design spec](../2026-08-23-chess-arena-design.md) and [the interfaces document](../2026-08-23-chess-arena-interfaces.md), one per build track. **All decisions resolved, all seams met.** Each spec is written to be built from without re-reading the design spec.
 
 | Role spec | Lines | Owns |
 |---|---|---|
@@ -56,16 +56,27 @@ Checked for contradictions where several roles resolved the same open question i
 
 No contradictions found at any seam.
 
-## Open decisions carried forward
+## All Decisions Resolved (Harmonization Revision 4)
 
-None block implementation. Each is owned by exactly one role:
+All interface-affecting decisions have been resolved and applied to the affected role specs and interfaces document:
 
-| Decision | Owner | Recommendation |
+| Decision | Resolution | Owner |
 |---|---|---|
-| Opening book composition | `client-engineer` | Mainline openings only, no eval bias |
-| Baseline bot strength | `client-engineer` | Depth 2, material only — must not flag at 3+2 |
-| `choose_move` raising | `client-engineer` | Resign and log the traceback; it is a bug, not a transient |
-| SSE coalescing mechanism | `server-engineer` | Per-game 500ms throttle for non-featured moves |
-| Featured-game policy | `dashboard-engineer` | As above; confirmed by two roles |
-| Arena table format | `workshop-author` | Document generically until the CLI exists |
-| Stretch artefacts | `workshop-author` | `eval-tuner` and `/improve-bot` deferred to build time |
+| `controller` field schema | `TEXT NOT NULL DEFAULT 'client'` in `bots` table | `server-engineer` |
+| SSE coalescing | Per-game 500ms throttle for non-featured moves | `server-engineer` |
+| Illegal move strikes | Per-game columns in `games` table (already in schema) | `server-engineer` |
+| Featured game policy | Highest rating sum, ≥20s hold, tie-break on `game_id` | `dashboard-engineer` |
+| `analyze_game` format | Markdown: PGN + timing table + event log | `mcp-engineer` |
+| Provisional annotation | Computed field `games_played < 10` | `server-engineer` / `dashboard-engineer` |
+| Local stats gap | `arena.py --serve` (stretch) for local view; dashboard shows server games only | `client-engineer` / `dashboard-engineer` |
+| View any game | Click grid cells to feature locally (client-side) | `dashboard-engineer` |
+| Opening book | Mainline openings, internal implementation | `client-engineer` (non-blocking) |
+
+**New requirements added:**
+1. **View any server game** — Dashboard grid cells clickable in My Bot mode (§7.2 in dashboard-engineer)
+2. **Identify "my bot"** — URL param `?bot=BotName` or `localStorage` for visual highlighting (§7.3 in dashboard-engineer)
+3. **Local arena statistics** — `arena.py --serve` (stretch) launches local web view at `localhost:8001` (§3.4 in client-engineer)
+
+**Implementation decisions (non-blocking):**
+- Baseline bot depth, re-poll interval, exception handling, clock measurement, arena defaults — all owned by `client-engineer` with recommendations in §10
+- Arena table format, stretch agents — owned by `workshop-author`, deferred to build time
