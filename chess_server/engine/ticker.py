@@ -13,6 +13,7 @@ from chess_core import (
     TICK_INTERVAL_NS,
     TerminationReason,
     check_delivery_timeout,
+    has_flagged,
     elapsed_ms,
 )
 
@@ -87,6 +88,17 @@ async def step_delivery_grace(deps: EngineDeps, txn: Txn, now_mono: int) -> None
                     deps, txn, game, opposite_win(game.to_move), TerminationReason.ABANDONED
                 )
 
+
+async def step_flag(deps: EngineDeps, txn: Txn, now_mono: int) -> None:
+    """Role spec §7.5. `has_flagged` is the single declaration of design §6.4's
+    `<= 0`; chess_server computes no remaining time of its own."""
+    games = GameRepo(txn.conn, txn.executor)
+    for game in await games.list_delivered_active():
+        async with _unit(txn, f"flag_{game.id}"):
+            if has_flagged(_clock_from_game(game), now_mono):
+                await finalise_game_locked(
+                    deps, txn, game, opposite_win(game.to_move), TerminationReason.FLAG
+                )
 
 
 async def _tick_once(
