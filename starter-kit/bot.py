@@ -1,134 +1,49 @@
-"""Baseline chess bot - starting point for workshop attendees.
-
-This bot uses material-counting minimax to depth 2 with time management.
-It beats ref_random reliably and loses to ref_greedy reliably.
-Most importantly: it does NOT flag at 3+2 time control.
-"""
+"""Baseline chess bot — `choose_move` is the only function you need to change."""
+import time
 import chess
 from chess_client import ClockView
 
-
-# Standard piece values in centipawns
-PIECE_VALUES = {
-    chess.PAWN: 100,
-    chess.KNIGHT: 320,
-    chess.BISHOP: 330,
-    chess.ROOK: 500,
-    chess.QUEEN: 900,
-    chess.KING: 20000
-}
-
-
+PIECE_VALUES = {chess.PAWN: 100, chess.KNIGHT: 320, chess.BISHOP: 330,
+                chess.ROOK: 500, chess.QUEEN: 900}
 MATE_SCORE = 20000
+SEARCH_DEPTH = 2  # raise this to play stronger; the budget below keeps it safe
 
 
-def evaluate_position(board: chess.Board, perspective: chess.Color) -> int:
-    """Material count in centipawns, always from `perspective`'s point of view.
-
-    The perspective is fixed rather than taken from `board.turn` because minimax
-    returns terminal positions immediately, before any min/max flip can correct
-    the sign. Scored from whoever happens to be to move, delivering checkmate
-    comes back as -20000 and the bot avoids winning.
-    """
-    if board.is_checkmate():
-        return -MATE_SCORE if board.turn == perspective else MATE_SCORE
-    if board.is_stalemate() or board.is_insufficient_material():
-        return 0
-    
-    score = 0
-    for square in chess.SQUARES:
-        piece = board.piece_at(square)
-        if piece:
-            value = PIECE_VALUES.get(piece.piece_type, 0)
-            if piece.color == perspective:
-                score += value
-            else:
-                score -= value
-    
-    return score
+def evaluate(board: chess.Board) -> int:
+    """Material in centipawns, always for the side to move at this node."""
+    if board.is_game_over():
+        return -MATE_SCORE if board.is_checkmate() else 0
+    return sum(PIECE_VALUES.get(p.piece_type, 0) * (1 if p.color == board.turn else -1)
+               for p in board.piece_map().values())
 
 
-def minimax(
-    board: chess.Board,
-    depth: int,
-    alpha: int,
-    beta: int,
-    maximizing: bool,
-    perspective: chess.Color
-) -> int:
-    """Minimax with alpha-beta pruning, scored for `perspective` throughout."""
+def search(board: chess.Board, depth: int, alpha: int, beta: int) -> int:
+    """Negamax with alpha-beta pruning, scoring every node for its own side."""
     if depth == 0 or board.is_game_over():
-        return evaluate_position(board, perspective)
-    
-    if maximizing:
-        max_eval = float('-inf')
-        for move in board.legal_moves:
-            board.push(move)
-            eval_score = minimax(board, depth - 1, alpha, beta, False, perspective)
-            board.pop()
-            max_eval = max(max_eval, eval_score)
-            alpha = max(alpha, eval_score)
-            if beta <= alpha:
-                break
-        return max_eval
-    else:
-        min_eval = float('inf')
-        for move in board.legal_moves:
-            board.push(move)
-            eval_score = minimax(board, depth - 1, alpha, beta, True, perspective)
-            board.pop()
-            min_eval = min(min_eval, eval_score)
-            beta = min(beta, eval_score)
-            if beta <= alpha:
-                break
-        return min_eval
+        return evaluate(board)
+    best = -2 * MATE_SCORE
+    for move in board.legal_moves:
+        board.push(move)
+        # Negated because the child node scores for the opponent, not for us.
+        score = -search(board, depth - 1, -beta, -alpha)
+        board.pop()
+        best = max(best, score)
+        alpha = max(alpha, best)
+        if alpha >= beta:
+            break
+    return best
 
 
 def choose_move(board: chess.Board, clock: ClockView) -> chess.Move:
-    """Choose a move for your bot.
-    
-    This is the only function you need to implement. It is called whenever
-    it's your turn to move.
-    
-    The chess.Board object gives you the current position and all legal moves.
-    The ClockView gives you time information without needing to know which
-    color you are.
-    
-    Args:
-        board: chess.Board with the current position (use board.turn for your
-               color, board.legal_moves for available moves)
-        clock: ClockView with my_ms (your remaining time), opponent_ms,
-               increment_ms, and ply
-    
-    Returns:
-        Your chosen move as a chess.Move object (must be in board.legal_moves)
-    
-    Time management strategy:
-        Budget ~1/40th of remaining time per move (assumes ~40 moves left).
-        This is safe at 3+2: 180s + 40*2s = 260s total budget / 40 = 6.5s/move.
-        Even with no increment, 180s / 40 = 4.5s/move leaves margin.
-    """
-    # Time budget: assume 40 moves remaining
-    time_budget_ms = clock.my_ms / 40
-    
-    # For very low time, reduce depth or pick quickly
-    if time_budget_ms < 100:
-        # Just pick first legal move when < 100ms budget
-        return list(board.legal_moves)[0]
-    
-    # Search depth 2 (our move + opponent's response)
-    perspective = board.turn
-    best_move = None
-    best_score = float('-inf')
-    
+    """Pick a move, spending at most a fortieth of the time you have left on it."""
+    deadline = time.monotonic() + clock.my_ms / 40_000
+    best_move, best_score = None, -2 * MATE_SCORE
     for move in board.legal_moves:
         board.push(move)
-        # Maximize our position after opponent's best response
-        score = minimax(board, 1, float('-inf'), float('inf'), False, perspective)
+        score = -search(board, SEARCH_DEPTH - 1, -2 * MATE_SCORE, 2 * MATE_SCORE)
         board.pop()
-        
         if score > best_score:
-            best_score = score
-            best_move = move
-    
-    return best_move if best_move else list(board.legal_moves)[0]
+            best_move, best_score = move, score
+        if time.monotonic() > deadline:
+            break  # budget spent: play the best move examined so far
+    return best_move

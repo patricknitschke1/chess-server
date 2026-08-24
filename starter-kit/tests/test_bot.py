@@ -173,6 +173,32 @@ def test_baseline_bot_beats_ref_random_reliably():
     assert score / games >= 0.75, f"Baseline scored only {score}/{games} against ref_random"
 
 
+def test_baseline_bot_stops_searching_once_its_budget_is_spent():
+    """A deeper search must cost move quality, not the game.
+
+    The budget used to be computed and then ignored — depth was hard-coded, so
+    an attendee who raised it found the "time management" did nothing and
+    flagged, which is the most common way a first bot loses. At depth 5 from the
+    opening the unbounded search takes about 1.5s; with 2s on the clock the
+    budget is 50ms and the bot must come back near that, not near 1.5s.
+    """
+    baseline = load_bot("bot.py")
+    baseline.SEARCH_DEPTH = 5
+
+    board = chess.Board()
+    clock = ClockView(my_ms=2000, opponent_ms=180000, increment_ms=0, ply=20)
+
+    start = time.monotonic()
+    move = baseline.choose_move(board, clock)
+    elapsed_ms = (time.monotonic() - start) * 1000
+
+    assert move in board.legal_moves
+    assert elapsed_ms < 400, (
+        f"depth-5 search took {elapsed_ms:.0f}ms against a 50ms budget; "
+        "the budget is not bounding the search"
+    )
+
+
 def test_baseline_bot_plays_mate_in_one():
     """The baseline must take checkmate when it is one move away.
 
