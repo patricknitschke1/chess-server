@@ -10,8 +10,10 @@ import contextlib
 from contextlib import asynccontextmanager
 from typing import AsyncIterator, Optional
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 
+from chess_server.api.errors import ApiError
 from chess_server.api.settings import Settings
 from chess_server.api.state import AppState
 from chess_server.engine import state as engine_state
@@ -86,4 +88,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 def create_app(app_state: AppState) -> FastAPI:
     app = FastAPI(title="Chess Arena", lifespan=lifespan)
     app.state.arena = app_state
+
+    @app.exception_handler(ApiError)
+    async def _api_error(request: Request, exc: ApiError) -> JSONResponse:
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={"error": exc.error, "details": exc.details},
+            headers=exc.headers,
+        )
+
     return app

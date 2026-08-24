@@ -1,8 +1,12 @@
 import asyncio
 
+import httpx
 import pytest
 
 from chess_core import RATED_INCREMENT_NS, RATED_TIME_CONTROL_NS, STARTING_RATING
+from chess_server.api.app import create_app
+from chess_server.api.settings import Settings
+from chess_server.api.state import AppState
 from chess_server.engine import state
 from chess_server.engine.deps import EngineDeps
 from chess_server.engine.games import create_game_locked
@@ -177,3 +181,33 @@ def seed_bots(store):
         return made
 
     return _seed
+
+
+JOIN_CODE = "workshop-2026"
+ADMIN_TOKEN = "admin-secret"
+
+
+@pytest.fixture
+def api_state(store, clock, sink):
+    """A pre-built AppState, so route tests never run the lifespan."""
+    return AppState(
+        store=store,
+        settings=Settings(
+            db_path=store.path, join_code=JOIN_CODE, admin_token=ADMIN_TOKEN
+        ),
+        sink=sink,
+        now_mono=clock,
+    )
+
+
+@pytest.fixture
+def api_app(api_state):
+    return create_app(api_state)
+
+
+@pytest.fixture
+async def client(api_app):
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=api_app), base_url="http://arena.test"
+    ) as http:
+        yield http
