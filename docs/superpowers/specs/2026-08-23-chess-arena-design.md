@@ -728,7 +728,7 @@ The arena runs the same clock code as the server, so a bot that flags locally fl
 
 ## 18. Testing
 
-- **`chess_core`** — direct unit tests, no fixtures, no mocks. Elo gets a property test asserting the exchange is **zero-sum and symmetric** (true now that K is flat).
+- **`chess_core`** — direct unit tests, no fixtures, no mocks. Elo gets a property test asserting the exchange is **zero-sum** (true now that K is flat), and that the underdog gains more than the favourite. It is *not* swap-symmetric and no test should assert that: 1000 beating 1400 gains 22, while 1400 beating 1000 gains 2.
 - **Clock** — table-driven over §6.4: flag on exact zero, no increment on flag, rejected move does not reset, flag precedes illegal-move validation.
 - **Delivery** — re-delivery does not restart the clock; delivery after side switch starts a fresh turn; mailbox drained by a reconnecting poll.
 - **Matchmaker** — seeded snapshots; colour precedence, same-owner and rematch relaxation after three ticks.

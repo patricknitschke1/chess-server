@@ -1,7 +1,7 @@
 """Elo rating calculations per §10.
 
-K=24 flat for all bots. Exchange is zero-sum and symmetric for
-competitor-vs-competitor games.
+K=24 flat for all bots. Exchange is zero-sum for competitor-vs-competitor games.
+It is not swap-symmetric: the underdog gains more than the favourite.
 """
 from chess_core.types import RatingUpdate
 
@@ -16,7 +16,8 @@ def compute_rating_exchange(
 ) -> tuple[RatingUpdate, RatingUpdate]:
     """Compute two-sided Elo exchange for a decisive game, K=24 flat per §10.1.
     
-    Exchange is zero-sum and symmetric.
+    Exchange is zero-sum. It is not swap-symmetric: 1000 beating 1400 gains 22,
+    while 1400 beating 1000 gains 2.
     
     Args:
         winner_rating: Winner's current rating
@@ -58,7 +59,7 @@ def compute_draw_exchange(
 ) -> tuple[RatingUpdate, RatingUpdate]:
     """Compute two-sided Elo exchange for a draw, K=24 flat per §10.1.
     
-    Exchange is zero-sum and symmetric.
+    Exchange is zero-sum. A draw moves points from the favourite to the underdog.
     
     Args:
         white_rating: White's current rating
