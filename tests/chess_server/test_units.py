@@ -50,6 +50,13 @@ FORBIDDEN_LITERALS = (
 ALLOWED = {
     "schema.py": {STARTING_RATING},
     "db.py": {ns_to_ms(POLL_RECENCY_NS)},
+    # Centipawn magnitudes and placeholder anchor ratings that happen to equal
+    # PLY_CAP, ns_to_ms(TICK_INTERVAL_NS), STARTING_RATING and ns_to_ms(POLL_HOLD_NS).
+    # Numerically equal, semantically unrelated: importing any of them here would
+    # assert a dependency that does not exist.
+    "reference_bots.py": {
+        PLY_CAP, STARTING_RATING, ns_to_ms(TICK_INTERVAL_NS), ns_to_ms(POLL_HOLD_NS),
+    },
 }
 
 
