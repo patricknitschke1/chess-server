@@ -1,0 +1,27 @@
+[project]
+name = "chess-arena"
+version = "0.1.0"
+description = "Chess bot competition server for an agentic AI workshop"
+requires-python = ">=3.11"
+dependencies = [
+    "chess>=1.11",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4",
+    "pytest-cov>=4.1",
+]
+
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["chess_core*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
+addopts = "--strict-markers"
