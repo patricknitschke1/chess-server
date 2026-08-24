@@ -83,6 +83,36 @@ def deliver_position(
     )
 
 
+def remaining_ns(
+    clock: ClockState,
+    color: Color,
+    now_mono: int
+) -> int:
+    """Nanoseconds left on one side's clock, counting time burnt this turn.
+
+    Only the side to move burns time, and only once the position has been
+    delivered — an undelivered position has not started anyone's turn (§6.2).
+    May go negative; that is what flag-fall looks like.
+    """
+    stored_ns = clock.white_ns if color == Color.WHITE else clock.black_ns
+    if color != clock.to_move or clock.turn_started_mono is None:
+        return stored_ns
+    return stored_ns - (now_mono - clock.turn_started_mono)
+
+
+def has_flagged(clock: ClockState, now_mono: int) -> bool:
+    """Whether the side to move has run out of time, per §6.4's `<= 0`.
+
+    Exists so that §6.4's "flag precedes illegal-move validation" ordering can be
+    asked as a separate question. `account_move_and_switch` is deliberately
+    atomic and cannot answer it without also mutating, so without this the
+    server would hand-roll the predicate in the ticker and again at the move
+    endpoint — the two-places-one-rule shape that got the predicate stated
+    inconsistently once already.
+    """
+    return remaining_ns(clock, clock.to_move, now_mono) <= 0
+
+
 def account_move_and_switch(
     clock: ClockState,
     receive_mono: int,

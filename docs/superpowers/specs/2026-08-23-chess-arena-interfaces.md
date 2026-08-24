@@ -225,7 +225,15 @@ def detect_termination(fen: str, history_fens: List[str]) -> tuple[bool, Optiona
     
     Args:
         fen: Current position in FEN notation
-        history_fens: All FENs in game history for threefold detection
+        history_fens: All FENs in game history for threefold detection.
+            **Contract, binding on every caller:** `[starting_fen] + [fen_after
+            for each ply in order]` — it includes the position the game began
+            from AND the current position. Threefold counts occurrences in this
+            list and needs `>= 3`, so omitting either end silently under-counts.
+            A server building it from `SELECT fen_after FROM moves ORDER BY ply`
+            drops ply 0 and will not claim the commonest repetition of all
+            (Nf3 Nf6 Ng1 Ng8 Nf3 Nf6 Ng1 Ng8 returns to the start three times).
+            `starter-kit/arena.py` is the reference implementation.
     
     Returns:
         (is_terminal, termination_reason, result)
@@ -329,6 +337,28 @@ def deliver_position(
     
     Returns:
         ClockState with turn_started_mono set, delivered_to_mover=1
+    """
+    ...
+
+def remaining_ns(clock: ClockState, color: Color, now_mono: int) -> int:
+    """Nanoseconds left on one side's clock, counting time burnt this turn.
+    
+    Only the side to move burns time, and only once the position has been
+    delivered. May go negative; that is what flag-fall looks like.
+    """
+    ...
+
+def has_flagged(clock: ClockState, now_mono: int) -> bool:
+    """Whether the side to move has run out of time, per §6.4's `<= 0`.
+    
+    Exists so §6.4's "flag precedes illegal-move validation" ordering can be
+    asked as a separate question before validating a move.
+    `account_move_and_switch` is deliberately atomic and cannot answer it
+    without also mutating.
+    
+    **`chess_server` must never subtract monotonic timestamps itself.** Both the
+    ticker and the move endpoint call this. The predicate living in two
+    hand-written places is how it came to be stated two ways once already.
     """
     ...
 

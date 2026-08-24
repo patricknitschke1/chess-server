@@ -403,3 +403,79 @@ def test_clock_is_the_sole_declaration_site_for_its_constants():
         "TICK_INTERVAL_NS",
     ):
         assert getattr(chess_core, name) == getattr(clock, name), name
+
+
+# has_flagged / remaining_ns — §6.4's predicate asked as a separate question
+
+def _delivered_clock(white_ns, black_ns, to_move, started=1_000_000):
+    return ClockState(
+        white_ns=white_ns,
+        black_ns=black_ns,
+        time_control_ns=180_000_000_000,
+        increment_ns=2_000_000_000,
+        to_move=to_move,
+        to_move_since_mono=started,
+        turn_started_mono=started,
+        delivered_to_mover=1
+    )
+
+
+def test_has_flagged_agrees_with_account_move_and_switch():
+    """The predicate must not drift from the atomic function that also applies it.
+
+    This helper exists so the server does not hand-roll `<= 0` in the ticker and
+    again at the move endpoint. It earns that only by matching exactly.
+    """
+    started = 1_000_000
+    for remaining in (5_000_000_000, 2_000_000_000, 1, 0):
+        for elapsed in (0, 1_999_999_999, 2_000_000_000, 2_000_000_001):
+            for color in (Color.WHITE, Color.BLACK):
+                white = remaining if color == Color.WHITE else 180_000_000_000
+                black = remaining if color == Color.BLACK else 180_000_000_000
+                state = _delivered_clock(white, black, color, started)
+                now = started + elapsed
+
+                predicted = clock.has_flagged(state, now)
+                applied = clock.account_move_and_switch(state, now, now).flagged
+
+                assert predicted is applied, (
+                    f"remaining={remaining} elapsed={elapsed} {color}: "
+                    f"has_flagged={predicted} but account_move_and_switch={applied}"
+                )
+
+
+def test_has_flagged_is_true_at_exactly_zero():
+    """§6.4: reaching exactly zero is a flag, not a reprieve."""
+    started = 1_000_000
+    state = _delivered_clock(2_000_000_000, 180_000_000_000, Color.WHITE, started)
+
+    assert clock.has_flagged(state, started + 1_999_999_999) is False
+    assert clock.has_flagged(state, started + 2_000_000_000) is True
+
+
+def test_remaining_ns_charges_only_the_side_to_move():
+    """The waiting side's clock is frozen; charging both is the classic bug."""
+    started = 1_000_000
+    state = _delivered_clock(10_000_000_000, 20_000_000_000, Color.WHITE, started)
+    now = started + 3_000_000_000
+
+    assert clock.remaining_ns(state, Color.WHITE, now) == 7_000_000_000
+    assert clock.remaining_ns(state, Color.BLACK, now) == 20_000_000_000
+
+
+def test_remaining_ns_does_not_run_before_delivery():
+    """An undelivered position has started nobody's turn (§6.2)."""
+    state = ClockState(
+        white_ns=10_000_000_000,
+        black_ns=20_000_000_000,
+        time_control_ns=180_000_000_000,
+        increment_ns=2_000_000_000,
+        to_move=Color.WHITE,
+        to_move_since_mono=1_000_000,
+        turn_started_mono=None,
+        delivered_to_mover=0
+    )
+    far_future = 1_000_000 + 999_000_000_000
+
+    assert clock.remaining_ns(state, Color.WHITE, far_future) == 10_000_000_000
+    assert clock.has_flagged(state, far_future) is False

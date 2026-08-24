@@ -106,6 +106,12 @@ If your work requires opening a socket, reading the system clock (`time.monotoni
    - Sets `turn_started_mono`, marks `delivered_to_mover=1`
    - **Idempotent:** re-delivery returns identical clock without restarting timer
 
+2b. **Reading the clock without mutating it** (§6.4)
+   - `remaining_ns(clock: ClockState, color: Color, now_mono: int) -> int`
+   - `has_flagged(clock: ClockState, now_mono: int) -> bool` — the `<= 0` predicate
+   - These let §6.4's "flag precedes illegal-move validation" be asked *before* a move is validated. `account_move_and_switch` is atomic by design and cannot answer it without also mutating. `chess_server` must never subtract monotonic timestamps itself.
+   - Must agree with `account_move_and_switch` exactly — pin that with a swept test, not a spot check.
+
 3. **Move accounting** (§6.4)
    - `account_move_and_switch(clock: ClockState, receive_mono: int, now_mono: int) -> ClockUpdateResult`
    - Performs the complete §6.4 sequence atomically:
@@ -313,6 +319,8 @@ All signatures are pinned in **Interfaces Part 1**. Bind to them; do not invent 
 **From clock.py:**
 - `create_clock(time_control_ns, increment_ns, to_move, now_mono) -> ClockState`
 - `deliver_position(clock, now_mono, ply) -> ClockState`
+- `remaining_ns(clock, color, now_mono) -> int`
+- `has_flagged(clock, now_mono) -> bool`
 - `account_move_and_switch(clock, receive_mono, now_mono) -> ClockUpdateResult`
 - `check_delivery_timeout(clock, now_mono, grace_ns) -> bool`
 - `compute_turn_elapsed_ms(clock, now_mono) -> Optional[int]`
