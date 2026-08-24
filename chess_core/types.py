@@ -31,6 +31,7 @@ class TerminationReason(Enum):
     RESIGNATION = "resignation"
     FLAG = "flag"
     ILLEGAL_FORFEIT = "illegal_forfeit"
+    CRASH = "crash"
     ABANDONED = "abandoned"
     ADJUDICATED = "adjudicated"
     NO_SHOW = "no_show"

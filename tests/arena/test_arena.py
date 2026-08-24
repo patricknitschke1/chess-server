@@ -299,3 +299,38 @@ def test_clock_charges_correct_side_from_black_to_move_opening():
     )
 
     assert result.black_time_ms < result.white_time_ms
+
+
+def test_bot_crash_reports_crash_not_illegal_forfeit():
+    """A raised exception is `crash`, not `illegal_forfeit`.
+
+    Both forfeit the game, but the label is what an attendee reads when
+    diagnosing: `illegal_forfeit` sends them to their move generation,
+    `crash` sends them to the traceback.
+    """
+    import arena
+    from ref_bots import ref_random
+    from chess_core import RATED_TIME_CONTROL_NS, RATED_INCREMENT_NS
+
+    def exploding_bot(board, clock):
+        raise ValueError("boom")
+
+    result = arena.run_single_game(
+        exploding_bot, ref_random.choose_move, "exploding", "ref_random",
+        RATED_TIME_CONTROL_NS, RATED_INCREMENT_NS,
+    )
+
+    assert result.termination == "crash"
+    assert result.result == "black_win"
+    assert result.white_illegal_attempts == 0
+
+
+def test_every_opening_has_white_to_move():
+    """White always starts; colour balance comes from matchmaking, not openings."""
+    import chess
+    from opening_book import OPENING_BOOK
+
+    for fen in OPENING_BOOK:
+        board = chess.Board(fen)
+        assert board.turn == chess.WHITE, f"{fen} does not have White to move"
+        assert not board.is_game_over()

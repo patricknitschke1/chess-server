@@ -189,7 +189,9 @@ All display timestamps are UTC wall clock. **All elapsed arithmetic uses `time.m
  rated, source, white_strikes, black_strikes, created_at, started_at, ended_at`
 
 - `status` ∈ `pending | active | finished | aborted`
-- `termination` ∈ `checkmate | stalemate | insufficient | fifty_move | threefold | resignation | flag | illegal_forfeit | abandoned | adjudicated | no_show | server_restart | admin_abort`
+- `termination` ∈ `checkmate | stalemate | insufficient | fifty_move | threefold | resignation | flag | illegal_forfeit | crash | abandoned | adjudicated | no_show | server_restart | admin_abort`
+
+`crash` is distinct from `illegal_forfeit`: the bot raised rather than returning a bad move. Both forfeit the game, but an attendee reading `illegal_forfeit` goes looking for a move-generation bug, while `crash` sends them to the traceback. The termination taxonomy exists so attendees can self-diagnose — collapsing the two defeats the point.
 - `source` ∈ `matchmaker | challenge`
 
 **`seats`** — `bot_id PK, game_id` (§4.3)

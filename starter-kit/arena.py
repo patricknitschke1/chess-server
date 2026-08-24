@@ -22,6 +22,7 @@ from chess_core import (
     ms_to_ns,
     ns_to_ms,
     Color,
+    TerminationReason,
     STARTING_RATING,
     compute_rating_exchange,
     compute_draw_exchange,
@@ -154,7 +155,8 @@ def run_single_game(
         try:
             move = current_bot(board, clock_view)
         except Exception as e:
-            # Bot crashed - forfeit
+            # A raised exception is not an illegal move: it sends the attendee to a
+            # traceback rather than to their move generation.
             if verbose:
                 print(f"{white_name if board.turn == chess.WHITE else black_name} crashed: {e}")
             
@@ -162,7 +164,7 @@ def run_single_game(
                 white_name=white_name,
                 black_name=black_name,
                 result="black_win" if board.turn == chess.WHITE else "white_win",
-                termination="illegal_forfeit",
+                termination=TerminationReason.CRASH.value,
                 moves_san=moves_san,
                 moves_uci=moves_uci,
                 white_time_ms=ns_to_ms(clock.white_ns),
@@ -171,8 +173,8 @@ def run_single_game(
                 black_move_times=black_move_times,
                 white_flags=0,
                 black_flags=0,
-                white_illegal_attempts=white_illegal_attempts + (1 if board.turn == chess.WHITE else 0),
-                black_illegal_attempts=black_illegal_attempts + (0 if board.turn == chess.WHITE else 1),
+                white_illegal_attempts=white_illegal_attempts,
+                black_illegal_attempts=black_illegal_attempts,
                 ply_count=ply
             )
         

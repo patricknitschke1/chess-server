@@ -23,8 +23,8 @@ def test_termination_reason_enum_has_all_cases():
     reasons = {r.value for r in TerminationReason}
     expected = {
         "checkmate", "stalemate", "insufficient", "fifty_move", "threefold",
-        "resignation", "flag", "illegal_forfeit", "abandoned", "adjudicated",
-        "no_show", "server_restart", "admin_abort"
+        "resignation", "flag", "illegal_forfeit", "crash", "abandoned",
+        "adjudicated", "no_show", "server_restart", "admin_abort"
     }
     assert reasons == expected
 
