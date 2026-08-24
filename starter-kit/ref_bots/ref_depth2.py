@@ -34,8 +34,26 @@ def evaluate_position(board: chess.Board) -> int:
         if piece:
             value = PIECE_VALUES.get(piece.piece_type, 0)
             score += value if piece.color == chess.WHITE else -value
-    
+
+    # Material alone scores every quiet move identically, so a winning bot shuffles
+    # and draws by repetition. Driving the losing king to the edge is the smallest
+    # term that turns a won position into a win.
+    if score > 200:
+        score -= _king_edge_distance(board, chess.BLACK)
+    elif score < -200:
+        score += _king_edge_distance(board, chess.WHITE)
+
     return score
+
+
+def _king_edge_distance(board: chess.Board, color: chess.Color) -> int:
+    """How central that king is; larger means harder to mate."""
+    square = board.king(color)
+    if square is None:
+        return 0
+    file_distance = min(chess.square_file(square), 7 - chess.square_file(square))
+    rank_distance = min(chess.square_rank(square), 7 - chess.square_rank(square))
+    return (file_distance + rank_distance) * 10
 
 
 def minimax(board: chess.Board, depth: int, alpha: int, beta: int, maximizing: bool) -> int:
@@ -98,9 +116,14 @@ def choose_move(board: chess.Board, clock: ClockView) -> chess.Move:
     
     for move in board.legal_moves:
         board.push(move)
+        repeats = board.is_repetition(2)
         score = minimax(board, 1, float('-inf'), float('inf'), not board.turn)
         board.pop()
-        
+
+        # Never repeat voluntarily; a winning side that does draws its own game.
+        if repeats:
+            score += -5_000 if board.turn == chess.WHITE else 5_000
+
         if board.turn == chess.WHITE:
             if score > best_score:
                 best_score = score
