@@ -1,14 +1,16 @@
 """Tests for Elo rating calculations.
 
-Property test for zero-sum and symmetry is critical.
+The zero-sum property test is the critical one. Swap symmetry is NOT a property
+of Elo and is not tested: an upset (1000 beats 1400) moves 22 points, the
+expected result (1400 beats 1000) moves 2.
 """
 import chess_core.elo as elo
 
 
-# Property test: zero-sum and symmetric
+# Property tests: zero-sum, and the direction of the exchange
 
-def test_elo_zero_sum_symmetric():
-    """Property test: exchange is zero-sum and symmetric across the rating space per §10.1.
+def test_elo_zero_sum():
+    """Property test: exchange is zero-sum across the rating space per §10.1.
 
     This sweeps the whole plausible rating range rather than sampling a handful of
     pairs. Rounding is where zero-sum breaks, and rounding boundaries are exactly
@@ -27,6 +29,20 @@ def test_elo_zero_sum_symmetric():
                 f"{winner_update.delta} + {loser_update.delta}"
 
 
+def test_underdog_gains_more_than_the_favourite():
+    """The property that actually holds where symmetry does not.
+
+    Swapping the two ratings does not negate the deltas; it produces a different
+    magnitude. That asymmetry is the whole point of Elo, so pin its direction.
+    """
+    upset, _ = elo.compute_rating_exchange(1000, 1400)
+    expected_result, _ = elo.compute_rating_exchange(1400, 1000)
+
+    assert upset.delta == 22
+    assert expected_result.delta == 2
+    assert upset.delta > expected_result.delta
+
+
 def test_draw_exchange_zero_sum():
     """Draw exchange is zero-sum across the rating space.
 
@@ -42,14 +58,28 @@ def test_draw_exchange_zero_sum():
                 f"{white_update.delta} + {black_update.delta}"
 
 
-def test_draw_exchange_symmetric():
-    """Draw exchange is symmetric for equal ratings."""
-    # For equal ratings, swapping white/black makes no difference
-    white_update, black_update = elo.compute_draw_exchange(1200, 1200)
-    white_update_swap, black_update_swap = elo.compute_draw_exchange(1200, 1200)
-    
-    assert white_update.delta == white_update_swap.delta == 0
-    assert black_update.delta == black_update_swap.delta == 0
+def test_draw_between_equal_ratings_moves_nothing():
+    """An equal-rated draw is the expected result, so neither rating moves.
+
+    Swept rather than checked at 1200 alone, so a bug that only bites away from
+    the starting rating cannot hide.
+    """
+    for rating in range(600, 2001, 25):
+        white_update, black_update = elo.compute_draw_exchange(rating, rating)
+
+        assert white_update.delta == 0, rating
+        assert black_update.delta == 0, rating
+        assert white_update.rating_after == rating
+        assert black_update.rating_after == rating
+
+
+def test_draw_moves_points_from_the_favourite_to_the_underdog():
+    """A draw against a much weaker bot is a bad result and must cost rating."""
+    white_update, black_update = elo.compute_draw_exchange(1400, 1000)
+
+    assert white_update.delta < 0
+    assert black_update.delta > 0
+    assert white_update.delta + black_update.delta == 0
 
 
 # Extreme rating gap tests

@@ -1,4 +1,8 @@
 """Tests for chess rules, move validation, and termination detection."""
+import io
+
+import chess.pgn
+
 import chess_core.rules as rules
 from chess_core.types import MoveOutcome, TerminationReason, GameResult
 
@@ -240,12 +244,23 @@ def test_uci_to_san_illegal_raises():
 
 
 def test_fen_to_ascii_starting_position():
-    """Starting position renders recognizable board."""
-    fen = rules.STARTING_FEN
-    ascii_board = rules.fen_to_ascii(fen)
-    assert "♜" in ascii_board or "r" in ascii_board  # rook present
-    assert "♔" in ascii_board or "K" in ascii_board  # white king
-    assert "8" in ascii_board  # rank labels
+    """Starting position renders the full labelled board.
+
+    Pinned as an exact string: substring checks like `"r" in out` are satisfied
+    by a fen_to_ascii that returns its input unchanged.
+    """
+    expected = (
+        "8 r n b q k b n r\n"
+        "7 p p p p p p p p\n"
+        "6 . . . . . . . .\n"
+        "5 . . . . . . . .\n"
+        "4 . . . . . . . .\n"
+        "3 . . . . . . . .\n"
+        "2 P P P P P P P P\n"
+        "1 R N B Q K B N R\n"
+        "  a b c d e f g h"
+    )
+    assert rules.fen_to_ascii(rules.STARTING_FEN) == expected
 
 
 def test_san_list_to_pgn():
@@ -264,6 +279,47 @@ def test_san_list_to_pgn():
     assert "[WhiteElo \"1250\"]" in pgn
     assert "1. e4 e5" in pgn
     assert "1-0" in pgn or "1‑0" in pgn  # result marker
+
+
+def test_san_list_to_pgn_from_an_opening_position():
+    """Every arena game starts from the opening book, so this is the normal case.
+
+    Without [SetUp]/[FEN] the movetext is replayed against the standard start and
+    the file is unreadable — which is exactly the bug that shipped once already.
+    """
+    after_1_e4_e5 = "rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq e6 0 2"
+    pgn = rules.san_list_to_pgn(
+        san_moves=["Nf3", "Nc6", "Bb5"],
+        white_name="AlphaBot",
+        black_name="BetaBot",
+        result=GameResult.WHITE_WIN,
+        starting_fen=after_1_e4_e5
+    )
+
+    assert '[SetUp "1"]' in pgn
+    assert f'[FEN "{after_1_e4_e5}"]' in pgn
+    # Numbered from the opening's own fullmove number, not from 1.
+    assert "2. Nf3 Nc6 3. Bb5" in pgn
+
+    game = chess.pgn.read_game(io.StringIO(pgn))
+    assert game is not None
+    assert game.errors == []
+    assert game.headers["FEN"] == after_1_e4_e5
+    assert [m.uci() for m in game.mainline_moves()] == ["g1f3", "b8c6", "f1b5"]
+
+
+def test_san_list_to_pgn_omits_setup_for_the_standard_start():
+    """A standard-start game carries no FEN header, per PGN convention."""
+    pgn = rules.san_list_to_pgn(
+        san_moves=["e4", "e5"],
+        white_name="AlphaBot",
+        black_name="BetaBot",
+        result=GameResult.DRAW,
+        starting_fen=rules.STARTING_FEN
+    )
+
+    assert "[SetUp" not in pgn
+    assert "[FEN" not in pgn
 
 
 def test_constants_exist():

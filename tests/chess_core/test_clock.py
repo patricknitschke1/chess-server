@@ -59,7 +59,12 @@ def test_account_move_flags_below_zero():
 
 
 def test_account_move_no_increment_on_flag():
-    """Flagged move does not receive increment per §6.4."""
+    """Flagged move does not receive increment per §6.4.
+
+    Asserts the exact remainder. A bound like `< increment_ns` is satisfied by
+    the buggy value too (0.5s − 1s + 2s = 1.5s < 2s), so it cannot detect the
+    rule it is named for.
+    """
     state = ClockState(
         white_ns=500_000_000,  # 0.5 seconds
         black_ns=180_000_000_000,
@@ -77,8 +82,8 @@ def test_account_move_no_increment_on_flag():
     result = clock.account_move_and_switch(state, receive_mono, now_mono)
     
     assert result.flagged is True
-    # Increment NOT added
-    assert result.new_clock.white_ns < state.increment_ns
+    # 0.5s remaining − 1s elapsed = −0.5s, and no increment is added on top.
+    assert result.new_clock.white_ns == -500_000_000
 
 
 def test_account_move_adds_increment_when_not_flagged():
