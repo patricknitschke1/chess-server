@@ -179,14 +179,14 @@ def detect_termination(
     if board.is_stalemate():
         return (True, TerminationReason.STALEMATE, GameResult.DRAW)
     
-    # Fifty-move rule (server-claimed) - check before insufficient material
-    # because K vs K at halfmove 50 should be fifty-move, not insufficient
-    if board.can_claim_fifty_moves():
-        return (True, TerminationReason.FIFTY_MOVE, GameResult.DRAW)
-    
-    # Insufficient material
+# Insufficient material is a fact about the position and needs no claim, so it
+    # outranks the claimable draws below. K vs K reads better than "fifty_move".
     if board.is_insufficient_material():
         return (True, TerminationReason.INSUFFICIENT, GameResult.DRAW)
+
+    # Fifty-move rule (server-claimed on the bots' behalf, §22)
+    if board.can_claim_fifty_moves():
+        return (True, TerminationReason.FIFTY_MOVE, GameResult.DRAW)
     
     # Threefold repetition (server-claimed, via position key)
     current_key = position_key(fen)

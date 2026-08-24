@@ -108,12 +108,30 @@ def test_insufficient_material_king_knight_vs_king():
 
 
 def test_fifty_move_claim_at_exactly_50():
-    """Server claims fifty-move draw at exactly 50 full moves (100 halfmoves)."""
-    # FEN with halfmove clock at 100 (50 full moves)
-    fen = "8/8/8/4k3/8/8/4K3/8 w - - 100 100"
+    """Server claims fifty-move draw at exactly 50 full moves (100 halfmoves).
+
+    The position deliberately has rooks on it. A bare-kings position would also
+    be insufficient material, which outranks the claimable fifty-move draw, so
+    the test would pass for the wrong reason.
+    """
+    fen = "3rk3/8/8/8/8/8/8/3RK3 w - - 100 100"
     is_terminal, reason, result = rules.detect_termination(fen, [fen])
     assert is_terminal is True
     assert reason == TerminationReason.FIFTY_MOVE
+    assert result == GameResult.DRAW
+
+
+def test_insufficient_material_outranks_fifty_move():
+    """Bare kings are insufficient material, not a fifty-move claim.
+
+    Insufficient material is a fact about the position and needs no claim, so it
+    takes precedence. Both are draws — this is about the termination label being
+    honest, since it is what an attendee reads when diagnosing a game.
+    """
+    fen = "8/8/8/4k3/8/8/4K3/8 w - - 100 100"
+    is_terminal, reason, result = rules.detect_termination(fen, [fen])
+    assert is_terminal is True
+    assert reason == TerminationReason.INSUFFICIENT
     assert result == GameResult.DRAW
 
 
