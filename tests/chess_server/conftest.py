@@ -142,6 +142,18 @@ def make_game(store, deps, games):
 
 
 @pytest.fixture
+def poll(store, clock, bot_repo):
+    """Make a bot pool-eligible by giving it a poll at the current fake time."""
+
+    async def _poll(*bot_ids, at=None):
+        async with critical_section(store.writer, store.executor):
+            for bot_id in bot_ids:
+                await bot_repo.update_last_poll(bot_id, WALL, clock() if at is None else at)
+
+    return _poll
+
+
+@pytest.fixture
 def seed_bots(store):
     """Insert bot rows through the real repository, inside a real transaction."""
 

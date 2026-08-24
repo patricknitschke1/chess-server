@@ -10,15 +10,25 @@ from typing import AsyncIterator, Awaitable, Callable, Optional, Sequence
 from chess_core import (
     AGENT_DELIVERY_GRACE_NS,
     DELIVERY_GRACE_NS,
+    RATED_INCREMENT_NS,
+    RATED_TIME_CONTROL_NS,
     TICK_INTERVAL_NS,
     TerminationReason,
     check_delivery_timeout,
     has_flagged,
     elapsed_ms,
+    pair_bots,
 )
 
+from chess_server.engine import state
 from chess_server.engine.deps import EngineDeps
-from chess_server.engine.games import abort_game_locked, finalise_game_locked, opposite_win
+from chess_server.engine.games import (
+    abort_game_locked,
+    create_game_locked,
+    finalise_game_locked,
+    opposite_win,
+)
+from chess_server.engine.pool import offer_anchors, snapshot_pool
 from chess_server.engine.runner import _mover_id
 from chess_server.store.cas import CASConflict
 from chess_server.store.repositories import BotRepo, GameRepo, _clock_from_game
@@ -63,6 +73,54 @@ async def _unit(txn: Txn, name: str) -> AsyncIterator[None]:
 
 
 STEPS: list[Step] = []
+
+
+async def step_matchmaking(deps: EngineDeps, txn: Txn, now_mono: int) -> None:
+    """Role spec §7.2 (matchmaking half). Steps 1-7 of that list, in order."""
+    if deps.is_paused():
+        return
+    pool = await snapshot_pool(txn, now_mono)
+    competitors = [entry for entry in pool if not entry.is_anchor]
+    anchors = [entry for entry in pool if entry.is_anchor]
+
+    # Anchors are deliberately not passed in, so pair_bots never sees an
+    # anchor-versus-anchor option and the §9.3 gate cannot be bypassed.
+    pairings = pair_bots(competitors)
+    paired_ids = {p.white_bot_id for p in pairings} | {p.black_bot_id for p in pairings}
+    for competitor, anchor in offer_anchors(competitors, anchors, paired_ids):
+        # §9.2's colour precedence stays in one place.
+        pairings += pair_bots([competitor, anchor])
+
+    bots = BotRepo(txn.conn, txn.executor)
+    seated: set[int] = set()
+    for pairing in pairings:
+        white_id, black_id = pairing.white_bot_id, pairing.black_bot_id
+        async with _unit(txn, f"pair_{white_id}_{black_id}"):
+            await create_game_locked(
+                deps, txn,
+                await bots.get_by_id(white_id),
+                await bots.get_by_id(black_id),
+                time_control_ns=RATED_TIME_CONTROL_NS,
+                increment_ns=RATED_INCREMENT_NS,
+                source="matchmaker",
+                now_mono=now_mono,
+            )
+            seated |= {white_id, black_id}
+
+    # Deferred with everything else the tick did: a rolled-back tick must not
+    # leave the relaxation counter a tick ahead of the database.
+    idle = [entry.bot_id for entry in pool if entry.bot_id not in seated]
+    txn.defer(lambda: _record_pairing_outcome(seated, idle))
+
+
+def _record_pairing_outcome(seated: set[int], idle: list[int]) -> None:
+    """Design §9.4. Popping is the reset: a seated bot has left the pool, and its
+    next spell starts from 0 either way."""
+    for bot_id in seated:
+        state.unpaired_ticks.pop(bot_id, None)
+    for bot_id in idle:
+        state.unpaired_ticks[bot_id] = state.unpaired_ticks.get(bot_id, 0) + 1
+
 
 
 async def step_delivery_grace(deps: EngineDeps, txn: Txn, now_mono: int) -> None:
