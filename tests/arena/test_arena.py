@@ -263,6 +263,63 @@ def test_arena_detects_flags():
     assert result.result == "black_win"  # FastBot (black) wins
 
 
+def test_arena_records_a_mate_on_the_capping_ply_as_a_mate(monkeypatch):
+    """A checkmate delivered on the last permitted ply is a win, not a draw.
+
+    The loop used to test the cap before terminality, so the mating move was
+    played, the game fell out of the loop, and the result was written as
+    `adjudicated`/`draw`. chess_core.match checks terminality first, so the same
+    game scored 1-0 on the server and 1/2-1/2 in the arena — and the arena is
+    only useful if it predicts the server.
+    """
+    import arena
+    from chess_core import RATED_TIME_CONTROL_NS, RATED_INCREMENT_NS
+
+    monkeypatch.setattr(arena, "PLY_CAP", 1)
+
+    # Fool's mate, one ply from the end: White is to move and Qh4# ends it.
+    one_from_mate = "rnbqkbnr/pppp1ppp/8/4p3/6P1/5P2/PPPPP2P/RNBQKBNR b KQkq g3 0 2"
+
+    def mate_in_one(board, clock):
+        for move in board.legal_moves:
+            board.push(move)
+            mates = board.is_checkmate()
+            board.pop()
+            if mates:
+                return move
+        raise AssertionError("no mate available in the test position")
+
+    result = arena.run_single_game(
+        ref_random_choose_move, mate_in_one, "white", "black",
+        RATED_TIME_CONTROL_NS, RATED_INCREMENT_NS, opening_fen=one_from_mate,
+    )
+
+    assert result.termination == "checkmate", (
+        f"mate on the capping ply recorded as {result.termination!r}"
+    )
+    assert result.result == "black_win"
+
+
+def test_arena_still_adjudicates_a_draw_at_the_ply_cap(monkeypatch):
+    """The cap still ends non-terminal games, and at the same ply as before."""
+    import arena
+    from chess_core import RATED_TIME_CONTROL_NS, RATED_INCREMENT_NS
+
+    monkeypatch.setattr(arena, "PLY_CAP", 4)
+
+    def first_legal(board, clock):
+        return next(iter(board.legal_moves))
+
+    result = arena.run_single_game(
+        first_legal, first_legal, "a", "b",
+        RATED_TIME_CONTROL_NS, RATED_INCREMENT_NS,
+    )
+
+    assert result.termination == "adjudicated"
+    assert result.result == "draw"
+    assert result.ply_count == 4
+
+
 def test_arena_computes_statistics():
     """Arena computes mean and p95 move times correctly."""
     from arena import compute_statistics

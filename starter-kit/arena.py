@@ -112,7 +112,7 @@ def run_single_game(
     
     ply = 0
     
-    while ply < PLY_CAP:
+    while True:
         # Check for natural termination
         is_terminal, termination_reason, game_result = detect_termination(fen, history_fens)
         if is_terminal:
@@ -141,6 +141,12 @@ def run_single_game(
                 ply_count=ply,
                 opening_fen=opening_fen
             )
+        
+        # Terminality is decided before the cap, matching chess_core.match: a mate
+        # delivered on the capping ply is a mate. Checking the cap first recorded it
+        # as an adjudicated draw, so the same game scored 1-0 live and 1/2-1/2 here.
+        if ply >= PLY_CAP:
+            break
         
         # Select bot
         current_bot = white_bot if board.turn == chess.WHITE else black_bot
