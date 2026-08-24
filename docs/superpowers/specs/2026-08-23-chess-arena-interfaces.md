@@ -11,7 +11,7 @@ This document defines exact type signatures, dataclasses, and contracts for all 
 
 `chess_core` is a **pure** package: no I/O, no clock reads, no network. Time is always passed in as integer nanoseconds from `time.monotonic_ns()`.
 
-**Units convention:** `chess_core` uses **nanoseconds** internally; the database and wire format use **milliseconds**. Conversion happens only at the boundary via two named helpers defined in `chess_core/clock.py`: `ms_to_ns(ms: int) -> int` and `ns_to_ms(ns: int) -> int`. Every signature and dataclass field name carries its unit suffix (`_ns` or `_ms`) consistently, and a field without a suffix is a bug.
+**Units convention:** `chess_core` uses **nanoseconds** internally; the database and wire format use **milliseconds**. Conversion happens only at the boundary via two named helpers defined in `chess_core/clock.py`: `ms_to_ns(ms: int) -> int` and `ns_to_ms(ns: int) -> int`. Every signature and dataclass field name carries its unit suffix (`_ns` or `_ms`) consistently, and a field without a suffix is a bug. **`_mono` counts as a nanosecond suffix**: it marks a `time.monotonic_ns()` reading, which is always nanoseconds and never a wall-clock time. `to_move_since_mono`, `turn_started_mono`, `now_mono` and `receive_mono` are conformant; anything bare is not.
 
 **`owner` is a public display handle**, chosen at registration and shown on the leaderboard and dashboard — it is how the room knows whose bot is winning. It must never be an email address, and registration says so. §14's "no owner identifiers in SSE payloads" is therefore narrowed to: **no tokens anywhere**; `owner` may appear wherever `bot_name` does.
 
@@ -49,6 +49,8 @@ class TerminationReason(Enum):
     NO_SHOW = "no_show"
     SERVER_RESTART = "server_restart"
     ADMIN_ABORT = "admin_abort"
+    CRASH = "crash"  # bot raised; distinct from illegal_forfeit so the attendee
+                      # is sent to the traceback, not to their move generation
 
 class GameResult(Enum):
     """Game outcome from White's perspective."""
@@ -481,7 +483,7 @@ from typing import List
 
 def pair_bots(
     pool: List[PoolEntry],
-    seed: Optional[int] = None
+    seed: Optional[int] = None  # INERT. Pairing is fully deterministic; see below.
 ) -> List[Pairing]:
     """Pure pairing function implementing §9.2 policy.
     
@@ -493,11 +495,15 @@ def pair_bots(
     4. Color precedence: alternate from last_color; ties broken by white_count,
        then bot_id
     
-    Deterministic and seeded-testable.
+    Deterministic: the same pool always produces the same pairings.
     
     Args:
         pool: Snapshot of eligible bots
-        seed: Optional random seed for deterministic testing
+        seed: Unused. The §9.2 algorithm has no random component, so this
+            changes nothing and a caller must not rely on it for
+            reproducibility. It once held a `random.seed()` call, which
+            silently reset the process-global RNG on every tick and broke
+            `chess_core` purity. Kept only because it is a pinned seam.
     
     Returns:
         List of Pairing objects (white_bot_id, black_bot_id)
