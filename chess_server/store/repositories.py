@@ -15,7 +15,14 @@ from chess_core import (
 )
 
 from chess_server.store.cas import assert_cas
-from chess_server.store.rows import BotRow, GameRow, SeatRow, from_row
+from chess_server.store.rows import (
+    BotRow,
+    GameRow,
+    MoveRow,
+    RatingHistoryRow,
+    SeatRow,
+    from_row,
+)
 
 NON_TERMINAL = ("pending", "active")
 
@@ -366,3 +373,55 @@ class SeatRepo(_Repo):
 
     async def list_seated_bot_ids(self) -> list[int]:
         return [row["bot_id"] for row in await self._all("SELECT bot_id FROM seats")]
+
+
+class MoveRepo(_Repo):
+    async def insert_move(
+        self,
+        game_id: int,
+        ply: int,
+        uci: str,
+        san: str,
+        fen_after: str,
+        server_elapsed_ms: int,
+        client_reported_ms: Optional[int],
+    ) -> None:
+        """server_elapsed_ms is what the clock was charged; client_reported_ms is
+        self-reported compute time, diagnostics only (design §5.1)."""
+        await self._write(
+            "INSERT INTO moves (game_id, ply, uci, san, fen_after, server_elapsed_ms,"
+            " client_reported_ms) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (game_id, ply, uci, san, fen_after, server_elapsed_ms, client_reported_ms),
+        )
+
+    async def list_moves_for_game(self, game_id: int) -> list[MoveRow]:
+        rows = await self._all(
+            "SELECT * FROM moves WHERE game_id = ? ORDER BY ply", (game_id,)
+        )
+        return [from_row(MoveRow, row) for row in rows]
+
+
+class RatingHistoryRepo(_Repo):
+    async def insert_rating_change(
+        self, bot_id: int, game_id: int, rating_before: int, rating_after: int,
+        delta: int, ts: str,
+    ) -> None:
+        await self._write(
+            "INSERT INTO rating_history (bot_id, game_id, rating_before, rating_after,"
+            " delta, ts) VALUES (?, ?, ?, ?, ?, ?)",
+            (bot_id, game_id, rating_before, rating_after, delta, ts),
+        )
+
+    async def sum_deltas_by_bot(self, bot_id: int) -> int:
+        """COALESCE because /admin/consistency's identity divides on this (§8.5)."""
+        row = await self._one(
+            "SELECT COALESCE(SUM(delta), 0) AS total FROM rating_history WHERE bot_id = ?",
+            (bot_id,),
+        )
+        return row["total"]
+
+    async def list_points_for_bot(self, bot_id: int) -> list[RatingHistoryRow]:
+        rows = await self._all(
+            "SELECT * FROM rating_history WHERE bot_id = ? ORDER BY ts, game_id", (bot_id,)
+        )
+        return [from_row(RatingHistoryRow, row) for row in rows]
