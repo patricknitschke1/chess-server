@@ -1292,6 +1292,56 @@ class NoGameResponse(BaseModel):
   - `400` — ErrorResponse: "Name already taken" | "Invalid role" | "Invalid join code"
   - `429` — ErrorResponse: "Rate limit exceeded", Retry-After header
 
+### Bot Identity and Control
+
+**GET /bots/me**
+- **Authenticated**
+- **Response (200):**
+  ```python
+  class MyBotResponse(BaseModel):
+      bot_id: int
+      name: str
+      owner: str
+      role: str            # "competitor" | "benchmark" | "anchor"
+      rating: int
+      wins: int
+      losses: int
+      draws: int
+      games_played: int
+      is_provisional: bool  # games_played < 10
+      controller: str       # "client" | "agent"
+      current_game_id: Optional[int]  # resolved through `seats`, never by scanning games
+  ```
+- **Errors:**
+  - `401` — ErrorResponse: "No bot registered for this token. Call register_bot first."
+  - `429` — ErrorResponse: "Rate limit exceeded", Retry-After header
+
+  Implemented by `server-engineer`. The MCP `get_my_bot()` tool is a consumer of this
+  route and its `MyBotResult` is this shape; it implements nothing.
+
+**POST /bots/me/control**
+- **Authenticated**
+- **Request:**
+  ```python
+  class SetControlRequest(BaseModel):
+      action: str  # "take" | "release"
+  ```
+- **Response (200):**
+  ```python
+  class SetControlResponse(BaseModel):
+      controller: str  # "agent" after take, "client" after release
+      message: str     # actionable prose for the agent transcript
+  ```
+- **Errors:**
+  - `400` — ErrorResponse: "Invalid action '{action}'. Must be 'take' or 'release'."
+  - `401` — ErrorResponse: "No bot registered for this token. Call register_bot first."
+  - `409` — ErrorResponse: "Cannot take control while your bot is in a game. Wait for it to finish, or resign."
+  - `429` — ErrorResponse: "Rate limit exceeded", Retry-After header
+
+  The field is `action`, not `mode`, matching design §8.1. `take` is refused whenever
+  the bot holds a `seats` row (§13.3), and it wakes any held poll with
+  `NoGameResponse(reason="agent_has_control")`.
+
 ### Turn Polling
 
 **GET /bots/me/turn**
@@ -1328,6 +1378,44 @@ class NoGameResponse(BaseModel):
   - `403` — ErrorResponse: "Controller is 'agent'. Only agent tools may move."
   - `409` — ErrorResponse: "CAS conflict. Position has changed.", includes `ply: int`, `fen: str`, `status: str` in details
   - `429` — ErrorResponse: "Rate limit exceeded", Retry-After header
+
+**GET /games/{id}/moves**
+- **Unauthenticated**
+- **Response (200):**
+  ```python
+  class GameMovesResponse(BaseModel):
+      game_id: int
+      white_bot_name: str
+      black_bot_name: str
+      white_rating: Optional[int]
+      black_rating: Optional[int]
+      status: str
+      result: Optional[str]
+      termination: Optional[str]
+      starting_fen: str          # feeds san_list_to_pgn's starting_fen argument
+      final_ply: int
+      moves: List[GameMoveEntry]
+      white_strikes: int
+      black_strikes: int
+
+  class GameMoveEntry(BaseModel):
+      ply: int
+      uci: str
+      san: str
+      fen_after: str
+      server_elapsed_ms: int              # delivery -> receipt, network included
+      client_reported_ms: Optional[int]   # self-reported compute time, diagnostics only
+      white_ms_after: int
+      black_ms_after: int
+  ```
+- **Errors:**
+  - `404` — ErrorResponse: "Game not found"
+
+  Implemented by `server-engineer`. The MCP `analyze_game()` tool consumes this and
+  builds its own PGN, timing table and event log; the server returns data, not Markdown.
+  The strike counts are what the event log's "illegal move strike (n/3)" lines are built
+  from, and `server_elapsed_ms` versus `client_reported_ms` is what distinguishes a slow
+  bot from a slow network.
 
 ### Resignation
 
@@ -1497,6 +1585,9 @@ class NoGameResponse(BaseModel):
       black_bot_id: int
       black_bot_name: str
       black_rating: int
+      status: str                     # "pending" | "active"
+      fen: str
+      to_move: str                    # "white" | "black"
       ply: int
       white_ms: int
       black_ms: int
@@ -1506,6 +1597,8 @@ class NoGameResponse(BaseModel):
   ```
 
   Ratings are included because featured-game selection ranks by the sum of participant ratings; without them the dashboard would have to join against the leaderboard on every tick.
+
+  `fen`, `to_move` and `status` are included so the dashboard can render every board in the live grid from `/state` alone. Without them a page load mid-workshop must issue one `GET /games/{id}` per active game before it can draw anything, and `status` is what distinguishes a paired-but-undelivered game from one in play.
 
 **GET /bots/{bot_id}/rating_history**
 - **Unauthenticated**
@@ -1546,7 +1639,12 @@ class NoGameResponse(BaseModel):
       sse_clients: int
       db_writable: bool
       consecutive_tick_errors: int
+      ticker_restarts: int
   ```
+
+  `db_writable` is a real probe, not a constant: the server opens and immediately closes
+  a write transaction (§4.6). `ticker_restarts` counts supervisor-initiated restarts —
+  a detector wired to no remediation is what a stalled ticker costs.
 
 ### Admin Endpoints
 
@@ -1607,74 +1705,27 @@ All require `Authorization: Bearer <ADMIN_TOKEN>`.
   class ResetResponse(BaseModel):
       wiped_games: int
       wiped_moves: int
-### Arena Reports
-
-**POST /arena-reports**
-- **Authenticated** (bot token)
-- **Request:**
-  ```python
-  class SubmitArenaReportRequest(BaseModel):
-      candidate_name: str
-      opponent_name: str
-      games: int
-      wins: int
-      draws: int
-      losses: int
-      mean_move_ms: int
-      p95_move_ms: int
-      flags: int
-      illegal_attempts: int
-      seed: int
-      time_control_ms: int
-      increment_ms: int
-  ```
-- **Response (201):**
-  ```python
-  class SubmitArenaReportResponse(BaseModel):
-      report_id: int
-  ```
-- **Errors:**
-  - `401` — ErrorResponse: "No bot registered for this token. Call register_bot first."
-  - `422` — ErrorResponse: "Invalid payload", includes validation details
-  - `429` — ErrorResponse: "Rate limit exceeded", Retry-After header
-
-**GET /bots/{bot_id}/arena-reports**
-- **Unauthenticated**
-- **Response (200):**
-  ```python
-  class BotArenaReportsResponse(BaseModel):
-      bot_id: int
-      bot_name: str
-      reports: List[ArenaReportEntry]
-  
-  class ArenaReportEntry(BaseModel):
-      id: int
-      created_at: str  # ISO 8601
-      candidate_name: str
-      opponent_name: str
-      games: int
-      wins: int
-      draws: int
-      losses: int
-      mean_move_ms: int
-      p95_move_ms: int
-      flags: int
-      illegal_attempts: int
-      seed: int
-      time_control_ms: int
-      increment_ms: int
-  ```
-  Returns most recent 20 reports, ordered by `created_at` descending.
-- **Errors:**
-  - `404` — ErrorResponse: "Bot not found: {bot_id}"
-
       wiped_rating_history: int
       wiped_seats: int
-      wiped_mailboxes: int
+      wiped_challenges: int
       reset_bots: int
+      run_id: str  # regenerated; SSE clients refetch /state on the run change
   ```
 - **Errors:**
   - `401` — ErrorResponse: "Invalid admin token"
+  - `409` — ErrorResponse: "Pause matchmaking before resetting. POST /admin/matchmaking/pause, then retry."
+
+  There is no `wiped_mailboxes` count: the mailbox is process state, not a table (§5).
+  Bot identities, tokens and anchor ratings survive; competitor and benchmark ratings
+  return to `STARTING_RATING`. See `roles/server-engineer-spec.md` §10.1 for the full
+  list of what is wiped and what survives.
+
+### Arena Reports
+
+**Deferred — no models in this build.** Design §21 defers the whole `arena_reports`
+vertical, including `POST /arena-reports`, `GET /bots/{bot_id}/arena-reports` and the
+`arena_report_posted` SSE event, because its only producer (`arena.py --report`) is
+deferred with it. The models return with the dashboard panel that renders them.
 
 **GET /admin/consistency**
 - **Response (200):**
