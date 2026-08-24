@@ -113,12 +113,21 @@ Replaced by an explicit table:
 CREATE TABLE seats (
   bot_id  INTEGER PRIMARY KEY NOT NULL REFERENCES bots(id),
   game_id INTEGER NOT NULL REFERENCES games(id)
-);
+) WITHOUT ROWID;
 ```
 
 Two rows are inserted in the **same transaction** as the game insert; both are deleted on any terminal transition. The primary key makes a bot in two games a constraint violation at the storage layer, which is where an invariant this important belongs.
 
-**`NOT NULL` is load-bearing and is not decoration.** In SQLite an `INTEGER PRIMARY KEY` column is a rowid alias and *accepts `NULL`*, silently auto-assigning the next rowid. Verified: `INSERT INTO seats(bot_id, game_id) VALUES (NULL, 7)` is accepted, stored as `(1, 7)`, and `PRAGMA foreign_key_check` reports clean — so a phantom row occupies bot 1's seat and bot 1 can never be paired again, with no constraint violation anywhere to notice.
+**`WITHOUT ROWID` is load-bearing, and `NOT NULL` alone is not enough.** In an ordinary SQLite table, `INTEGER PRIMARY KEY` is a rowid alias, and the rowid is substituted *before* constraint checking — so `NOT NULL` never fires. Verified across four DDL variants:
+
+| DDL | `INSERT (NULL, 1)` |
+|---|---|
+| `INTEGER PRIMARY KEY NOT NULL` | **accepted**, silently stored as `bot_id=1` |
+| `INTEGER NOT NULL PRIMARY KEY` | **accepted**, silently stored as `bot_id=1` |
+| `INTEGER PRIMARY KEY NOT NULL … WITHOUT ROWID` | rejected |
+| `INTEGER NOT NULL UNIQUE` (no PK) | rejected |
+
+A NULL insert would otherwise become a phantom row occupying bot 1's seat, with `PRAGMA foreign_key_check` reporting clean — bot 1 could never be paired again and nothing would raise. `WITHOUT ROWID` still enforces both the uniqueness and the foreign key (verified), so it costs nothing here.
 
 **Ordering and the failure path**, both verified against SQLite rather than assumed:
 
@@ -310,7 +319,7 @@ Stated explicitly, because getting it backwards is silently wrong forever:
 ```
 1. elapsed   = receive_mono − turn_started_mono
 2. remaining = remaining − elapsed
-3. if remaining < 0        -> flag; game over; NO increment
+3. if remaining_ns <= 0       -> flag; game over; NO increment
 4. apply move (may end the game by mate or draw)
 5. if game continues       -> remaining += increment_ms
                               side switches; delivered_to_mover = 0;
@@ -458,12 +467,46 @@ PoolEntry = (bot_id, owner, rating, games_played, is_anchor,
              last_color, white_count, last_opponent_id, unpaired_ticks)
 ```
 
-Algorithm:
+Algorithm, as pseudocode — revision 4's prose ("skip a candidate pair … try the next adjacent candidate") was not implementable: it never said which of the two bots advances, nor whether relaxing a constraint requires both sides to have waited:
 
-1. Sort by `games_played` ascending, then `rating` ascending.
-2. Walk the sorted list pairing **adjacent** entries. Skip a candidate pair if same `owner`, or if it repeats `last_opponent_id`; try the next adjacent candidate instead.
-3. If a bot cannot be paired for **three consecutive ticks** (`unpaired_ticks >= 3`, carried in the snapshot so the function reads no clock and stays pure), its same-owner and rematch constraints are dropped in that order.
-4. **Colour precedence, explicit:** alternate from `last_color`. On conflict, the bot with the lower `white_count` takes White; if still tied, the lower `bot_id`.
+```
+pair_bots(pool, tick) -> list[Pairing]:
+    eligible = sort(pool, key = (games_played asc, rating asc, bot_id asc))
+    pairings = []
+    i = 0
+    while i < len(eligible) - 1:
+        a = eligible[i]
+        j = i + 1
+        matched = None
+        while j < len(eligible):
+            b = eligible[j]
+            if allowed(a, b):
+                matched = j
+                break
+            j += 1                      # b advances; a holds its place
+        if matched is None:
+            i += 1                      # a is unpairable this tick
+            continue
+        pairings.append(make_pairing(a, eligible[matched]))
+        remove indices i and matched from eligible
+        # i is not incremented: the list shifted, so eligible[i] is a new bot
+    return pairings
+
+allowed(a, b):
+    relaxed = (a.unpaired_ticks >= 3) or (b.unpaired_ticks >= 3)
+    if a.owner == b.owner and not relaxed:        return False
+    if a.last_opponent_id == b.bot_id and not relaxed: return False
+    if a.is_anchor and b.is_anchor:               return False
+    return True
+```
+
+**One waiting side is enough to relax.** Requiring both would deadlock the common case: a lone attendee with two bots, where neither can pair with anyone else and the same-owner rule blocks the only available game. Relaxation is symmetric in effect but asymmetric in trigger.
+
+Constraints are dropped **together** at `unpaired_ticks >= 3`, not in sequence. Revision 4 said "in that order" without saying how many ticks separated the two steps, which is another unimplementable instruction.
+
+`unpaired_ticks` is carried in the snapshot and incremented by the caller for any bot that ends a tick unpaired, so the function reads no clock and stays pure and seeded-testable.
+
+3. **Colour precedence, explicit:** alternate from `last_color`. On conflict, the bot with the lower `white_count` takes White; if still tied, the lower `bot_id`.
 
 Sorting by `games_played` first means new bots play within seconds. Sorting by rating second gives near-neighbour pairings without the widening-window machinery cut in revision 2.
 

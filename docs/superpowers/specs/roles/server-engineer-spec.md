@@ -9,7 +9,7 @@
 > 4. **You own these routes**, which revision 4 left described only in the MCP and interfaces documents: `POST /bots/me/control`, `GET /bots/me`, `GET /games/{id}/moves`, `GET /bots/{bot_id}/rating_history`. `mcp-engineer` consumes them and implements none of them.
 > 5. **`rated` is written at creation** from §5.3 rules 2–6; only rule 1's terminations may flip it to 0.
 > 6. **Restore the `controller='client'` check** on challenge creation *and* consumption.
-> 7. **`seats.bot_id` is `INTEGER PRIMARY KEY NOT NULL`** — without `NOT NULL` SQLite accepts a NULL and auto-assigns a rowid, so the invariant does not hold.
+> 7. **`seats` must be declared `WITHOUT ROWID`.** `NOT NULL` alone does not work: in a rowid table the rowid is substituted before constraint checking, so `INSERT (NULL, 1)` is accepted and silently stored as `bot_id=1` — a phantom row holding bot 1's seat forever, with `foreign_key_check` clean. Verified across four DDL variants; `WITHOUT ROWID` still enforces uniqueness and the foreign key.
 > 8. **Arena report retention orders by `id DESC`, never `created_at`.** With tied timestamps, `created_at` ordering deletes the *newest* rows. Verified.
 > 9. **Validate `name`, `owner`, `candidate_name`, `opponent_name` against `^[A-Za-z0-9 _-]{1,32}$`**, and bound the arena-report numerics semantically (`wins + draws + losses == games`, non-negative, `games <= 10000`).
 > 10. Use the canonical constants in design §5.2. There is no `TIME_CONTROL_MS`.
@@ -376,7 +376,7 @@ async def _tick(tick_number: int):
             mover_ns = clock.white_ns if mover_color == Color.WHITE else clock.black_ns
             elapsed_ns = now_mono - clock.turn_started_mono
             remaining_ns = mover_ns - elapsed_ns
-            if remaining_ns < 0:
+            if remaining_ns <= 0:
                 # Flagged
                 finalise_game(game.id, opposite_win(mover_color), 'flag')
         
@@ -975,7 +975,7 @@ Run every ~1000ms, under `critical_section`:
 4. **Flag detection**
    - Query games with `delivered_to_mover=1`, status='active'
    - For each: compute elapsed = now_mono - turn_started_mono; remaining = mover_time - elapsed
-   - If remaining < 0: finalise game, termination='flag', loss for flagged side
+   - If remaining_ns <= 0: finalise game, termination='flag', loss for flagged side
 5. **Agent auto-release**
    - Query bots with controller='agent'
    - For each: if (now_mono - last_agent_action_mono) > AGENT_AUTO_RELEASE_NS, set controller='client', wake waiters
@@ -1066,7 +1066,7 @@ Enumerate every anticipated failure and specify exact handling:
 | **CAS conflict** (concurrent move submission) | `cursor.rowcount == 0` after UPDATE | Roll back transaction, return 409 with current game state |
 | **Seat collision** (ticker pairing race) | `sqlite3.IntegrityError` on seat insert | `ROLLBACK TO SAVEPOINT` for that pairing only; continue tick with next pairing |
 | **Illegal move** | `MoveOutcome.accepted == False` | Increment strike counter; if 3rd strike, forfeit game; else return 400 with legal moves |
-| **Flag-fall** | Ticker detects remaining < 0 on delivered active game | Finalise game, termination='flag', loss for flagged side |
+| **Flag-fall** | Ticker detects remaining_ns <= 0 on delivered active game | Finalise game, termination='flag', loss for flagged side |
 | **Delivery grace expiry at ply 0** | Ticker detects timeout on undelivered ply-0 game | Abort game, termination='no_show', rated=0, delete seats |
 | **Delivery grace expiry mid-game** | Ticker detects timeout on undelivered mid-game | Finalise game, termination='abandoned', loss for absent side |
 | **Superseded poll** | Second poll for same bot arrives | Cancel first waiter, return `NoGameResponse` with reason='superseded' |

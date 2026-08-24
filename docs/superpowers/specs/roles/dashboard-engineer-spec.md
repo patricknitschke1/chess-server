@@ -7,7 +7,7 @@
 > 2. **Render every attendee-controlled string with `textContent`.** Bot names, owners, `candidate_name`, `opponent_name`, and `?bot=` — never interpolated into an HTML template literal, never `innerHTML`. `?bot=` is attacker-supplied by definition.
 > 3. **Colour from the `rated` field as delivered.** `rated` is now correct from creation (design §5.3), so an exhibition game no longer renders green mid-game and flips amber in the ticker.
 > 4. **Delete every remaining reference to `arena.py --serve`.** Local stats arrive via `arena_report_posted` and `GET /bots/{bot_id}/arena-reports`; the override replaced `--serve` rather than joining it.
-> 5. `ActiveGameSummary` now carries `fen`, `to_move` and `status` — render from those rather than reconstructing.
+> 5. `ActiveGameSummary` **must** carry `fen`, `to_move` and `status` so a grid cell can render without reconstructing state. This is a request on `server-engineer` and the interfaces document, not yet reflected in them — do not assume the fields are there until they are.
 
 **Role:** dashboard-engineer  
 **Date:** 2026-08-24  

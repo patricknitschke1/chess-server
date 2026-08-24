@@ -331,7 +331,7 @@ def account_move_and_switch(
     unbreakable:
     1. elapsed = receive_mono − turn_started_mono
     2. remaining = remaining − elapsed
-    3. if remaining < 0 -> flag (NO increment on flag)
+    3. if remaining_ns <= 0 -> flag (NO increment on flag)
     4. if not flagged -> remaining += increment_ns
     5. switch side; delivered_to_mover=0; turn_started_mono=NULL;
        to_move_since_mono=now_mono

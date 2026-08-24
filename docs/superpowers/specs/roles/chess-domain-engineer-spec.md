@@ -3,8 +3,8 @@
 > **Revision 5 errata — binding, and they override anything below that disagrees.**
 > Applied from [the round-4 review](../../../../agent-reports/2026-08-24-spec-review-round4.md). Where this spec and design spec revision 5 conflict, **the design spec wins**.
 >
-> 1. **The flag predicate is `remaining_ns <= 0`, not `< 0`.** Reaching exactly zero is a flag. §18's "flag on exact zero" test asserts this.
-> 2. **Matchmaker rule 2 must be written as explicit pseudocode**, stating that relaxing *one* side of a blocked pair is sufficient. Revision 4's prose was not implementable as written — this is what blocked phase 1.
+> 1. **The flag predicate is `remaining_ns <= 0`, not `< 0`.** Reaching exactly zero is a flag. §18's "flag on exact zero" test asserts this, and every document body has been corrected to match — if you find a `< 0` anywhere, it is a leftover and `<= 0` wins.
+> 2. **Matchmaker pairing is now explicit pseudocode in design §9.2 — implement that, not the prose below.** It fixes two things revision 4 left unimplementable: which bot advances on a skipped candidate (`b` advances, `a` holds), and that **one** waiting side (`unpaired_ticks >= 3`) is enough to relax, with same-owner and rematch constraints dropped together rather than in sequence.
 > 3. **`unpaired_ticks` is carried in `PoolEntry`** so the function reads no clock and stays pure and seeded-testable.
 > 4. Use the canonical constant names in design §5.2 (`RATED_TIME_CONTROL_NS`, `K_FACTOR`, `PLY_CAP`, …). `clock.py` and `elo.py` are the only declaration sites.
 > 5. Elo at K=24 is zero-sum under integer rounding — verified across 1,201 rating samples — so §18's property test is achievable as specified.
@@ -111,7 +111,7 @@ If your work requires opening a socket, reading the system clock (`time.monotoni
    - Performs the complete §6.4 sequence atomically:
      1. `elapsed = receive_mono − turn_started_mono`
      2. `remaining = remaining − elapsed`
-     3. `if remaining < 0 → flag (NO increment on flag)`
+     3. `if remaining_ns <= 0 → flag (NO increment on flag)`
      4. `if not flagged → remaining += increment_ns`
      5. Switch side; `delivered_to_mover=0`; `turn_started_mono=NULL`; `to_move_since_mono=now_mono`
    - Returns `ClockUpdateResult` with `new_clock`, `flagged` bool, `flagged_color`, `elapsed_ms`
@@ -244,7 +244,7 @@ If your work requires opening a socket, reading the system clock (`time.monotoni
 ```
 1. elapsed   = receive_mono − turn_started_mono
 2. remaining = remaining − elapsed
-3. if remaining < 0 → flag; game over; NO increment
+3. if remaining_ns <= 0 → flag; game over; NO increment
 4. apply move (may end the game by mate or draw)
 5. if game continues → remaining += increment_ms
                         side switches
