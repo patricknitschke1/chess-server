@@ -1678,7 +1678,7 @@ if __name__ == '__main__':
     main()
 ```
 
-```python
+```text
 # starter-kit/requirements.txt
 python-chess>=1.9.0
 ```
