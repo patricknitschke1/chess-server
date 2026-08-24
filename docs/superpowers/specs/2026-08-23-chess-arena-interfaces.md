@@ -1376,14 +1376,38 @@ class NoGameResponse(BaseModel):
       game_id: int
       white_bot_id: int
       white_bot_name: str
+      white_rating: int
       black_bot_id: int
       black_bot_name: str
+      black_rating: int
       ply: int
       white_ms: int
       black_ms: int
+      turn_elapsed_ms: Optional[int]  # None while undelivered
       is_featured: bool
       rated: bool
   ```
+
+  Ratings are included because featured-game selection ranks by the sum of participant ratings; without them the dashboard would have to join against the leaderboard on every tick.
+
+**GET /bots/{bot_id}/rating_history**
+- **Unauthenticated**
+- **Response (200):**
+  ```python
+  class RatingHistoryResponse(BaseModel):
+      bot_id: int
+      bot_name: str
+      points: List[RatingPoint]
+
+  class RatingPoint(BaseModel):
+      game_id: int
+      rating_after: int
+      delta: int
+      ts: str  # ISO 8601
+  ```
+- **Errors:** `404` — ErrorResponse: "Bot not found: {bot_id}"
+
+  Needed for the My Bot sparkline. Accumulating from `rating_changed` events alone breaks when a page is loaded mid-workshop, since the client has no backlog. Unbounded is acceptable at ~20 bots playing a single day; if that assumption changes, add a `limit`.
 
 **GET /events**
 - **Unauthenticated**
