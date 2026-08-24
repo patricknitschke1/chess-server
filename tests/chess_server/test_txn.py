@@ -3,7 +3,7 @@ import sqlite3
 
 import pytest
 
-from chess_server.store.txn import critical_section, reset_seq
+from chess_server.store.txn import critical_section, current_seq, reset_seq
 
 _INSERT = (
     "INSERT INTO bots (name, owner, token_hash, role, created_at)"
@@ -132,3 +132,19 @@ async def test_events_flush_in_emit_order_with_contiguous_seq(store):
 
     assert sink.types == ["first", "second", "third"]
     assert sink.seqs == [0, 1, 2]
+
+
+def test_current_seq_is_minus_one_before_anything_is_emitted():
+    """`/state.event_id` is this value, and a client's gap check reads it: after a
+    fresh run, every buffered event must satisfy `id > event_id`, including seq 0."""
+    assert current_seq() == -1
+
+
+async def test_current_seq_is_the_last_flushed_seq(store):
+    sink = _Sink(store.writer)
+
+    async with critical_section(store.writer, store.executor, sink) as txn:
+        txn.emit("first", {})
+        txn.emit("second", {})
+
+    assert current_seq() == sink.seqs[-1] == 1

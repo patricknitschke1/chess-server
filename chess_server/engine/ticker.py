@@ -337,11 +337,8 @@ async def step_challenge_ttl(deps: EngineDeps, txn: Txn, now_mono: int) -> None:
 async def step_presence(deps: EngineDeps, txn: Txn, now_mono: int) -> None:
     """Role spec §7.5. Edge-triggered against `state.connected`, so each event fires
     once per transition rather than once per tick. Writes no rows at all.
-
-    The competitor list is the whole polling population: an anchor never polls, so
-    a presence event for one would say nothing.
     """
-    for bot in await BotRepo(txn.conn, txn.executor).list_leaderboard():
+    for bot in await BotRepo(txn.conn, txn.executor).list_presence_candidates():
         recent = bot.last_poll_mono is not None and is_within(
             bot.last_poll_mono, now_mono, DISCONNECT_AFTER_NS
         )

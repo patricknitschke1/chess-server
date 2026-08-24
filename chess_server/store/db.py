@@ -29,9 +29,11 @@ class Store:
     writer: sqlite3.Connection
     reader: sqlite3.Connection
     executor: ThreadPoolExecutor
+    reader_executor: ThreadPoolExecutor
 
     def close(self) -> None:
         self.executor.shutdown(wait=True)
+        self.reader_executor.shutdown(wait=True)
         self.reader.close()
         self.writer.close()
 
@@ -45,4 +47,9 @@ def open_store(path: str) -> Store:
         reader=_connect(path),
         # max_workers=1 is the invariant: one connection, one thread, one writer.
         executor=ThreadPoolExecutor(max_workers=1, thread_name_prefix="sqlite-writer"),
+        # Its own thread, so a display read never queues behind the writer; still
+        # one thread, so nothing concurrently uses the single reader connection.
+        reader_executor=ThreadPoolExecutor(
+            max_workers=1, thread_name_prefix="sqlite-reader"
+        ),
     )

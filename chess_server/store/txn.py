@@ -27,6 +27,12 @@ def reset_seq() -> None:
     _next_seq = 0
 
 
+def current_seq() -> int:
+    """The last seq assigned; -1 when nothing has been emitted in this run. This is
+    what `/state.event_id` is, and what a client's gap check compares against."""
+    return _next_seq - 1
+
+
 def _drop(seq: int, event_type: str, data: dict) -> None:
     pass
 

@@ -175,6 +175,14 @@ class BotRepo(_Repo):
         )
         return [from_row(BotRow, row) for row in rows]
 
+    async def list_presence_candidates(self) -> list[BotRow]:
+        """§7.5. Everything that polls over HTTP. An anchor never does, so a
+        presence event for one would report a fact that cannot change."""
+        rows = await self._all(
+            "SELECT * FROM bots WHERE role IN ('competitor', 'benchmark') ORDER BY id"
+        )
+        return [from_row(BotRow, row) for row in rows]
+
     async def list_anchors(self) -> list[BotRow]:
         return [from_row(BotRow, row) for row in await self._all(
             "SELECT * FROM bots WHERE is_anchor = 1 ORDER BY id"
