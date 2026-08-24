@@ -13,7 +13,7 @@ When a decision trades cleverness against clarity, choose clarity. This code get
 
 ## Current state
 
-Design is complete and has been through two rounds of adversarial systems-design review (`agent-reports/`). The spec is the source of truth:
+Design is complete and has been through two rounds of adversarial systems-design review (`docs/agent-reports/`). The spec is the source of truth:
 [docs/superpowers/specs/2026-08-23-chess-arena-design.md](docs/superpowers/specs/2026-08-23-chess-arena-design.md)
 
 Module boundaries — `chess_core` signatures, SSE events, bot/SDK surface, HTTP models, MCP tools, test layout — are pinned in
@@ -67,7 +67,7 @@ The split is deliberate and is itself workshop content:
 
 Extract a new skill when a pattern has recurred, not in anticipation of it.
 
-Subagent reports go in `agent-reports/` — see [agent-reports/README.md](agent-reports/README.md) for naming and conventions.
+Subagent reports go in `docs/agent-reports/` — see [docs/agent-reports/README.md](docs/agent-reports/README.md) for naming and conventions.
 
 ## How this project is built
 
@@ -92,11 +92,3 @@ The orchestrator's checks at step 3: every §-level requirement in the design sp
 - Read the spec section for the area you are touching before changing it.
 - Changes that contradict the spec need the spec updated in the same change.
 - Never commit tokens, `.env`, or `*.db`.
-
-### Stay inside your task
-
-**Modify only the files your task names.** Do not move, rename or delete anything outside it, and do not tidy the repository on the way past.
-
-Implementation tasks never touch `docs/superpowers/specs/`, `agent-reports/`, `AGENTS.md`, or `.claude/agents/`. If a path looks wrong or a link looks broken, **report it — do not fix it**. A build agent once relocated `agent-reports/` to repair a relative link and rewrote references across eight files; the link was fine, and the whole change had to be reverted.
-
-If a task genuinely cannot be completed without touching something outside its scope, that is a `BLOCKED` report, not a licence.

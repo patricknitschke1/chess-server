@@ -1,7 +1,7 @@
 # Server Engineer Role Specification
 
 > **Revision 5 errata — binding, and they override anything below that disagrees.**
-> Applied from [the round-4 review](../../../../agent-reports/2026-08-24-spec-review-round4.md). Where this spec and design spec revision 5 conflict, **the design spec wins**.
+> Applied from [the round-4 review](../../../agent-reports/2026-08-24-spec-review-round4.md). Where this spec and design spec revision 5 conflict, **the design spec wins**.
 >
 > 1. **Delivery has exactly two call sites, and you own both.** `GET /bots/me/turn` delivers for `controller='client'`; `get_legal_moves()` (via its route) delivers for `controller='agent'`. `get_game()` never delivers. Nothing in the ticker delivers. Revision 4 defined `deliver_position()` and called it from nowhere — every paired game would have died `no_show` at ply 0.
 > 2. **`write_lock` is acquired at exactly one place per call stack.** Every mutating helper needs an inner `*_locked` form; the ticker calls only those. A nested `async with` on an `asyncio.Lock` wedges the coroutine forever, silently, and §4.6's error counter stays at zero. Verified by execution.

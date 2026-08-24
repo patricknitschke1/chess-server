@@ -1,7 +1,7 @@
 # Client Engineer — Role Specification
 
 > **Revision 5 errata — binding, and they override anything below that disagrees.**
-> Applied from [the round-4 review](../../../../agent-reports/2026-08-24-spec-review-round4.md). Where this spec and design spec revision 5 conflict, **the design spec wins**.
+> Applied from [the round-4 review](../../../agent-reports/2026-08-24-spec-review-round4.md). Where this spec and design spec revision 5 conflict, **the design spec wins**.
 >
 > 1. **Remove the resign-on-illegal-move behaviour.** An illegal move is a three-strike path owned by the server (§8.3); resigning on the client turns a recoverable bug into a lost game and hides the diagnostic.
 > 2. **Add back-off on repeated `superseded` responses** so two accidentally-running clients cannot spin.

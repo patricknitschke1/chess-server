@@ -1,7 +1,7 @@
 # Chess Domain Engineer — Role Specification
 
 > **Revision 5 errata — binding, and they override anything below that disagrees.**
-> Applied from [the round-4 review](../../../../agent-reports/2026-08-24-spec-review-round4.md). Where this spec and design spec revision 5 conflict, **the design spec wins**.
+> Applied from [the round-4 review](../../../agent-reports/2026-08-24-spec-review-round4.md). Where this spec and design spec revision 5 conflict, **the design spec wins**.
 >
 > 1. **The flag predicate is `remaining_ns <= 0`, not `< 0`.** Reaching exactly zero is a flag. §18's "flag on exact zero" test asserts this, and every document body has been corrected to match — if you find a `< 0` anywhere, it is a leftover and `<= 0` wins.
 > 2. **Matchmaker pairing is now explicit pseudocode in design §9.2 — implement that, not the prose below.** It fixes two things revision 4 left unimplementable: which bot advances on a skipped candidate (`b` advances, `a` holds), and that **one** waiting side (`unpaired_ticks >= 3`) is enough to relax, with same-owner and rematch constraints dropped together rather than in sequence.

@@ -26,7 +26,7 @@ Given a change, answer three questions in order:
 - `docs/superpowers/specs/2026-08-23-chess-arena-design.md` — §4, §6 and §7.1 are normative
 - `docs/superpowers/specs/2026-08-23-chess-arena-interfaces.md` — the pinned seams
 - `AGENTS.md` — the invariants
-- `agent-reports/` — three rounds of prior review. Do not re-find what was already found and fixed; do check that fixes stayed fixed.
+- `docs/agent-reports/` — three rounds of prior review. Do not re-find what was already found and fixed; do check that fixes stayed fixed.
 
 ## How to review
 
@@ -43,4 +43,4 @@ Given a change, answer three questions in order:
 
 ## Output
 
-A report in `agent-reports/`, named `YYYY-MM-DD-<topic>-review.md`, opening with what was reviewed, against which commit, and a verdict. Then: critical issues, significant concerns, minor gaps, over-engineering, and a prioritised list of what to change before the work lands.
+A report in `docs/agent-reports/`, named `YYYY-MM-DD-<topic>-review.md`, opening with what was reviewed, against which commit, and a verdict. Then: critical issues, significant concerns, minor gaps, over-engineering, and a prioritised list of what to change before the work lands.

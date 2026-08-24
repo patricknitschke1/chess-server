@@ -35,7 +35,7 @@ Find what will break, in this order of value:
 - **A review that concludes "this looks good" is a failed review** unless you can show exactly what you checked to get there.
 - **Cite sections.** Every finding names the § it contradicts or the gap it fills.
 - **Rank by severity** and separate "will break" from "is untidy". A review where everything is critical is a review nobody acts on.
-- **Check that prior fixes stayed fixed.** Read the earlier reports in `agent-reports/`. Do not re-find what is already closed; do verify the closure is real, and flag anything that regressed.
+- **Check that prior fixes stayed fixed.** Read the earlier reports in `docs/agent-reports/`. Do not re-find what is already closed; do verify the closure is real, and flag anything that regressed.
 - **Do not re-litigate settled product decisions.** Flag defects in how a decision is specified, not the decision itself.
 - **Propose fixes that fit the constraints** — single process, SQLite, one day, twenty people, code that gets read on a projector. A correct fix that triples the complexity is not a fix.
 
@@ -45,7 +45,7 @@ Edit anything except your own report. Not the spec, not the code, not the tests.
 
 ## Output
 
-A report in `agent-reports/`, named `YYYY-MM-DD-<topic>-review.md`:
+A report in `docs/agent-reports/`, named `YYYY-MM-DD-<topic>-review.md`:
 
 - **Header table** — what was reviewed, the commit SHA, date, your role, and a verdict that says plainly whether implementation may begin, and for which phases.
 - **Verification of prior rounds** — a table of earlier findings with status (Fixed / Partially fixed / Not fixed / Regressed) and a one-line justification each.
