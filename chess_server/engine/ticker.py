@@ -10,7 +10,9 @@ from typing import AsyncIterator, Awaitable, Callable, Optional, Sequence
 import chess
 
 from chess_core import (
+    AGENT_AUTO_RELEASE_NS,
     AGENT_DELIVERY_GRACE_NS,
+    CHALLENGE_TTL_NS,
     DELIVERY_GRACE_NS,
     EXHIBITION_TIME_CONTROL_NS,
     RATED_INCREMENT_NS,
@@ -22,9 +24,11 @@ from chess_core import (
     check_delivery_timeout,
     has_flagged,
     elapsed_ms,
+    is_within,
     ms_to_ns,
     ns_to_ms,
     pair_bots,
+    window_start_mono,
 )
 
 from chess_server.engine import state
@@ -54,6 +58,10 @@ logger = logging.getLogger(__name__)
 
 # The literal is a float so it cannot collide with TICK_INTERVAL_NS's own value.
 TICK_INTERVAL_SECONDS = TICK_INTERVAL_NS / 1e9
+
+# Server-local (role spec §2.1): presence is a dashboard concern, so chess_core
+# has no opinion on it and there is nothing to import.
+DISCONNECT_AFTER_NS = 30_000_000_000
 
 Step = Callable[[EngineDeps, Txn, int], Awaitable[None]]
 
@@ -293,6 +301,64 @@ async def step_flag(deps: EngineDeps, txn: Txn, now_mono: int) -> None:
                 )
 
 
+async def step_agent_release(deps: EngineDeps, txn: Txn, now_mono: int) -> None:
+    """Role spec §7.5. AGENT_AUTO_RELEASE_NS (45 s) sits below AGENT_DELIVERY_GRACE_NS
+    (60 s); reversed, the grace always fires first and this branch is unreachable."""
+    bots = BotRepo(txn.conn, txn.executor)
+    for bot in await bots.list_agent_controlled():
+        # NULL releases immediately: the safe direction, and 3c's `take` writes
+        # the field in the same transaction, so it should never be seen.
+        if bot.last_agent_action_mono is not None and is_within(
+            bot.last_agent_action_mono, now_mono, AGENT_AUTO_RELEASE_NS
+        ):
+            continue
+        async with _unit(txn, f"release_{bot.id}"):
+            await bots.update_controller(bot.id, "client")
+            txn.defer(lambda bot_id=bot.id: deps.wake(bot_id))
+
+
+async def step_challenge_ttl(deps: EngineDeps, txn: Txn, now_mono: int) -> None:
+    """Role spec §7.5, design §12. Only `open` challenges age out; a `queued` one
+    has been accepted and belongs to step 1."""
+    challenges = ChallengeRepo(txn.conn, txn.executor)
+    cutoff_mono = window_start_mono(now_mono, CHALLENGE_TTL_NS)
+    for challenge in await challenges.list_expired_open(cutoff_mono):
+        async with _unit(txn, f"ttl_{challenge.id}"):
+            await challenges.cas_set_status(
+                challenge.id, challenge.status, "expired",
+                reason="timeout", resolved_at=utc_now_iso(),
+            )
+            txn.emit(
+                "challenge_updated",
+                await _challenge_event(txn, await challenges.get_by_id(challenge.id)),
+            )
+
+
+async def step_presence(deps: EngineDeps, txn: Txn, now_mono: int) -> None:
+    """Role spec §7.5. Edge-triggered against `state.connected`, so each event fires
+    once per transition rather than once per tick. Writes no rows at all.
+
+    The competitor list is the whole polling population: an anchor never polls, so
+    a presence event for one would say nothing.
+    """
+    for bot in await BotRepo(txn.conn, txn.executor).list_leaderboard():
+        recent = bot.last_poll_mono is not None and is_within(
+            bot.last_poll_mono, now_mono, DISCONNECT_AFTER_NS
+        )
+        if recent == (bot.id in state.connected):
+            continue
+        txn.emit(
+            "bot_connected" if recent else "bot_disconnected",
+            {"bot_id": bot.id, "bot_name": bot.name},
+        )
+        # Deferred, so a rolled-back tick does not consume the edge that its
+        # discarded event was the only record of.
+        if recent:
+            txn.defer(lambda bot_id=bot.id: state.connected.add(bot_id))
+        else:
+            txn.defer(lambda bot_id=bot.id: state.connected.discard(bot_id))
+
+
 # Role spec §7: the order is a production fact, not a test argument. Consumption
 # precedes pairing so an accepted challenge always beats matchmaking to the seat.
 STEPS: list[Step] = [
@@ -301,6 +367,9 @@ STEPS: list[Step] = [
     step_anchor_moves,
     step_delivery_grace,
     step_flag,
+    step_agent_release,
+    step_challenge_ttl,
+    step_presence,
 ]
 
 
