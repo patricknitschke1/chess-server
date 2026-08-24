@@ -452,23 +452,6 @@ When `--report` is present:
 
 **Token source:** Same as `run.py` — `.env` file with `CHESS_BOT_TOKEN=<token>` or environment variable. If no token is found, log the `401` warning and continue.
 
-**`--serve` flag (Stretch Goal, added Harmonization Revision 4):**
-
-```bash
-python arena.py --bots bot.py baseline.py --games 100 --serve
-```
-
-**Purpose:** Resolves the "local stats gap" identified in harmonization—arena runs offline so the main dashboard never sees local games. With `--serve`, the arena launches a simple HTTP server at `localhost:8001` showing a minimal read-only web view of the just-completed arena run's results: ELO table, W/L/D records, and optionally a game viewer.
-
-**Implementation notes:**
-- Uses Python's `http.server.HTTPServer` with a simple HTML template, no JavaScript build step
-- Serves static results snapshot—arena must finish all games before starting the server
-- Separate from main dashboard at `localhost:8000` (which shows only live server games)
-- Not required for core workshop functionality—attendees can read terminal output instead
-- Does NOT POST results to the server (that would create an unverifiable attack vector against the rated leaderboard)
-
-**Why this matters:** Attendees running offline arena games want to see formatted results without cluttering the main projector dashboard with unverifiable local data.
-
 ---
 
 ## 4. Normative behaviour
