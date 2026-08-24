@@ -37,7 +37,6 @@ def choose_move(board: chess.Board, clock: ClockView) -> chess.Move:
 
         board.push(move)
         delivers_mate = board.is_checkmate()
-        repeats = board.is_repetition(2)
         gives_check = board.is_check()
         board.pop()
 
@@ -45,10 +44,9 @@ def choose_move(board: chess.Board, clock: ClockView) -> chess.Move:
             return move
 
         # Material-only evaluation scores every quiet move identically, so the bot
-        # shuffles one piece and draws by repetition from a winning position. These
-        # three terms exist only to break that tie and make progress.
-        if repeats:
-            score -= 10_000
+        # shuffles one piece and draws from a winning position. These two terms exist
+        # only to break that tie and make progress. Repetition cannot be detected at
+        # all here: a bot is handed a position, never a history, so move_stack is empty.
         if gives_check:
             score += 30
         score += chess.square_distance(move.to_square, board.king(not board.turn)) * -1

@@ -76,27 +76,56 @@ def test_ref_depth2_returns_legal_move():
 
 
 def test_ref_depth2_avoids_obvious_blunders():
-    """ref_depth2 doesn't hang pieces in one move."""
-    # Position where moving queen to dangerous square loses it
-    board = chess.Board("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1")
+    """ref_depth2 must not give its queen away for a pawn.
+
+    K+Q vs K+P, and the d7 pawn is defended by the king. Taking it is the only
+    move that loses material, and a depth-2 search sees the recapture — unless
+    the min/max flag is inverted, in which case the opponent's reply is searched
+    as if it helped us and the bot goes hunting for the biggest available
+    blunder. It played Qxd7+ and lost the queen to Kxd7.
+    """
+    board = chess.Board("4k3/3p4/8/8/8/8/3Q4/4K3 w - - 0 1")
     clock = ClockView(my_ms=180000, opponent_ms=180000, increment_ms=2000, ply=0)
-    
-    # Run several times - should never hang queen immediately
-    for _ in range(3):
-        move = ref_depth2_choose_move(board, clock)
-        # Make move, check opponent can't capture queen for free
-        test_board = board.copy()
-        test_board.push(move)
-        
-        # If we moved our queen, ensure it's not hanging
-        if board.piece_at(move.from_square).piece_type == chess.QUEEN:
-            for opp_move in test_board.legal_moves:
-                if test_board.is_capture(opp_move):
-                    captured = test_board.piece_at(opp_move.to_square)
-                    if captured and captured.piece_type == chess.QUEEN:
-                        # Opponent can capture queen - this should be rare with depth 2
-                        # (might happen if it's a trade)
-                        pass
+
+    move = ref_depth2_choose_move(board, clock)
+
+    board.push(move)
+    hangs_queen = [
+        opponent_move.uci()
+        for opponent_move in board.legal_moves
+        if board.is_capture(opponent_move)
+        and (captured := board.piece_at(opponent_move.to_square)) is not None
+        and captured.piece_type == chess.QUEEN
+    ]
+    assert not hangs_queen, (
+        f"ref_depth2 played {move.uci()}, losing the queen to {hangs_queen}"
+    )
+
+
+def test_bots_are_given_a_position_with_no_history():
+    """A bot cannot see repetition, because it never receives a move history.
+
+    Both reference bots once carried anti-repetition penalties keyed on
+    `board.is_repetition(2)`. The arena rebuilds the board from a FEN every ply,
+    so `move_stack` is empty and those penalties could never fire — they read as
+    a mitigation that was not there. Attendees copy these bots.
+    """
+    seen = []
+
+    def recording_bot(board, clock):
+        seen.append(len(board.move_stack))
+        return next(iter(board.legal_moves))
+
+    from arena import run_single_game
+    from chess_core import RATED_TIME_CONTROL_NS, RATED_INCREMENT_NS
+
+    run_single_game(
+        recording_bot, ref_random_choose_move, "recorder", "ref_random",
+        RATED_TIME_CONTROL_NS, RATED_INCREMENT_NS,
+    )
+
+    assert seen, "the bot was never called"
+    assert set(seen) == {0}, f"bot saw move history of lengths {sorted(set(seen))}"
 
 
 def test_opening_book_has_valid_fens():

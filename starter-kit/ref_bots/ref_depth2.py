@@ -116,13 +116,12 @@ def choose_move(board: chess.Board, clock: ClockView) -> chess.Move:
     
     for move in board.legal_moves:
         board.push(move)
-        repeats = board.is_repetition(2)
-        score = minimax(board, 1, float('-inf'), float('inf'), not board.turn)
+        # `board.turn` here is the side to move AFTER the push, and evaluate_position
+        # scores from White, so maximising is true exactly when White is on move.
+        # Negating it searches the opponent's reply as if it helped us, and the bot
+        # then picks the move whose most generous blunder is largest.
+        score = minimax(board, 1, float('-inf'), float('inf'), board.turn)
         board.pop()
-
-        # Never repeat voluntarily; a winning side that does draws its own game.
-        if repeats:
-            score += -5_000 if board.turn == chess.WHITE else 5_000
 
         if board.turn == chess.WHITE:
             if score > best_score:
