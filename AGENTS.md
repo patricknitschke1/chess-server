@@ -92,3 +92,11 @@ The orchestrator's checks at step 3: every §-level requirement in the design sp
 - Read the spec section for the area you are touching before changing it.
 - Changes that contradict the spec need the spec updated in the same change.
 - Never commit tokens, `.env`, or `*.db`.
+
+### Stay inside your task
+
+**Modify only the files your task names.** Do not move, rename or delete anything outside it, and do not tidy the repository on the way past.
+
+Implementation tasks never touch `docs/superpowers/specs/`, `agent-reports/`, `AGENTS.md`, or `.claude/agents/`. If a path looks wrong or a link looks broken, **report it — do not fix it**. A build agent once relocated `agent-reports/` to repair a relative link and rewrote references across eight files; the link was fine, and the whole change had to be reverted.
+
+If a task genuinely cannot be completed without touching something outside its scope, that is a `BLOCKED` report, not a licence.
