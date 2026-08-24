@@ -299,7 +299,7 @@ The `delivered_to_mover=0` predicate is what makes re-delivery free. **Re-readin
 
 ### 6.3 Undelivered positions have a deadline
 
-`DELIVERY_GRACE_MS = 15000`. Each tick, for any non-terminal game where `delivered_to_mover = 0` and `now − to_move_since_mono > DELIVERY_GRACE_MS`:
+`DELIVERY_GRACE_NS = 15_000_000_000` (15s). Each tick, for any non-terminal game where `delivered_to_mover = 0` and `now − to_move_since_mono > DELIVERY_GRACE_MS`:
 
 - **at ply 0** — the game never started: `aborted`, `no_show`, `rated=0`. Seats freed, the present bot returns to the pool, neither rating moves.
 - **mid-game** — the side to move has gone away: `finished`, `termination='abandoned'`, rated normally, loss for the absent side.
@@ -308,7 +308,7 @@ This is the only thing standing between a closed laptop lid and two bots being d
 
 A bot polling normally takes delivery within milliseconds, so 15s never fires on a healthy client, including across the reconnect gap between two 20s holds.
 
-`AGENT_DELIVERY_GRACE_MS = 60000` applies while `controller='agent'`, since a human is in that loop.
+`AGENT_DELIVERY_GRACE_NS = 60_000_000_000` (60s) applies while `controller='agent'`, since a human is in that loop.
 
 **Precedence against the clock.** A delivered position is governed by the clock, not by this rule: if the side to move has been delivered, only flag-fall (§6.4, detected by the ticker) can end the game for time. Abandonment applies **only** while `delivered_to_mover = 0`. The two can therefore never race, and a bot delivered a position with 500ms left flags at ~500ms rather than waiting 15s to be called abandoned.
 

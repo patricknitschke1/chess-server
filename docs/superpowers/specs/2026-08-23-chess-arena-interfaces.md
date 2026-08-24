@@ -365,7 +365,7 @@ def check_delivery_timeout(
     Args:
         clock: Current clock state
         now_mono: Current monotonic time in nanoseconds
-        grace_ns: Grace period in nanoseconds (DELIVERY_GRACE_MS or AGENT_DELIVERY_GRACE_MS)
+        grace_ns: Grace period in nanoseconds (DELIVERY_GRACE_NS or AGENT_DELIVERY_GRACE_MS)
     
     Returns:
         True if delivered_to_mover=0 and (now_mono - to_move_since_mono) > grace_ns
