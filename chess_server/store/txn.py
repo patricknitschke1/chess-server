@@ -8,17 +8,75 @@ from typing import AsyncIterator, Callable
 
 write_lock = asyncio.Lock()
 
+EventSink = Callable[[int, str, dict], None]
+
+# Per-run, module-owned: interfaces Part 2 pins server_run_started at seq 0, and a
+# client's gap check is only meaningful if seq restarts with the run.
+_next_seq = 0
+
+
+def _take_seq() -> int:
+    global _next_seq
+    seq = _next_seq
+    _next_seq += 1
+    return seq
+
+
+def reset_seq() -> None:
+    global _next_seq
+    _next_seq = 0
+
+
+def _drop(seq: int, event_type: str, data: dict) -> None:
+    pass
+
 
 @dataclass
 class Txn:
     conn: sqlite3.Connection
     executor: Executor
+    sink: EventSink = _drop
+    events: list[tuple[str, dict]] = field(default_factory=list)
+    deferred: list[Callable[[], None]] = field(default_factory=list)
+
+    def emit(self, event_type: str, data: dict) -> None:
+        """Buffer an SSE event. Nothing leaves the process until flush()."""
+        self.events.append((event_type, data))
+
+    def defer(self, fn: Callable[[], None]) -> None:
+        """Register an in-process mutation to apply only if this transaction commits."""
+        self.deferred.append(fn)
+
+    @asynccontextmanager
+    async def savepoint(self, name: str) -> AsyncIterator[None]:
+        """One unit of work. On failure, roll the rows back and truncate the buffers."""
+        events_at_entry = len(self.events)
+        deferred_at_entry = len(self.deferred)
+        await _finish(self.conn, f"SAVEPOINT {name}", self.executor)
+        try:
+            yield
+        except BaseException:
+            await _finish(self.conn, f"ROLLBACK TO {name}", self.executor)
+            await _finish(self.conn, f"RELEASE {name}", self.executor)
+            del self.events[events_at_entry:]
+            del self.deferred[deferred_at_entry:]
+            raise
+        else:
+            await _finish(self.conn, f"RELEASE {name}", self.executor)
 
     def flush(self) -> None:
-        pass
+        """Assign seq in commit order, fan out, then run the deferred work."""
+        for event_type, data in self.events:
+            self.sink(_take_seq(), event_type, data)
+        self.events.clear()
+        for fn in self.deferred:
+            fn()
+        self.deferred.clear()
 
     def discard(self) -> None:
-        pass
+        """A rolled-back unit must consume no seq — that is what the gap check reads."""
+        self.events.clear()
+        self.deferred.clear()
 
 
 def _execute(conn: sqlite3.Connection, sql: str, executor: Executor):
@@ -47,7 +105,7 @@ async def _finish(conn: sqlite3.Connection, sql: str, executor: Executor) -> Non
 
 @asynccontextmanager
 async def critical_section(
-    conn: sqlite3.Connection, executor: Executor
+    conn: sqlite3.Connection, executor: Executor, sink: EventSink = _drop
 ) -> AsyncIterator[Txn]:
     """Acquire the single writer, open a transaction, yield a Txn, commit or roll back.
 
@@ -56,7 +114,7 @@ async def critical_section(
     """
     async with write_lock:
         await _finish(conn, "BEGIN IMMEDIATE", executor)
-        txn = Txn(conn=conn, executor=executor)
+        txn = Txn(conn=conn, executor=executor, sink=sink)
         try:
             yield txn
         except BaseException:
