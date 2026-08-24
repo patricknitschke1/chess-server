@@ -332,7 +332,9 @@ python arena.py --replay 5 --pgn results.pgn
    - **Flag count** — most first bots lose by flagging
    - **Illegal move attempts** with count
 7. Exports PGN to `--pgn <file>`
-8. `--replay <game_number>` steps through a game in ASCII with clock display
+8. `--replay <game_number>` replays a game in ASCII. **Stepping and the clock display are deferred** (design §21) — the shipped `--replay` prints the whole game at once.
+
+**Deferred with bot development (design §21):** head-to-head win rates in the results table, reporting illegal-move attempts *with the offending FEN*, `--replay` stepping with clocks, and the `run_arena()` / `ArenaResult` / `ArenaStats` / `HeadToHead` structured API together with `--report` → `POST /arena-reports`. All of it either serves an unbuilt server route or exists to compare and debug bots. See the deferral note on Interfaces Part 3. What ships today is listed there; bind to the module, not to the sketch.
 
 **Why opening randomisation is mandatory per §17:**
 

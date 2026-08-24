@@ -1053,6 +1053,16 @@ class ServerError(ClientError):
 
 ### `arena.py` CLI and Results
 
+> **DEFERRED — not built, and not currently pinned.** `run_arena()`, `ArenaStats`, `HeadToHead` and `ArenaResult` below are a design sketch, not a seam any track may bind to today.
+>
+> Their only consumer is `arena.py --report` posting to `POST /arena-reports`. That route does not exist, and because `arena_reports` is display-only its shape follows what the dashboard renders — also unbuilt. Pinning these dataclasses now means guessing a wire format twice and reconciling later.
+>
+> The same applies to the remaining §17 arena items: head-to-head win rates in the output, reporting illegal-move attempts with the offending FEN, and `--replay` stepping with a clock display. All three are cheap and server-independent, but all three exist to compare and debug bots, which is deferred (design §21). They have no consumer today.
+>
+> **What `arena.py` actually ships** and what other tracks may rely on: `run_single_game()`, `ArenaTracker`, `GameResult`, `export_to_pgn()`, `replay_game()`, `build_schedule()`, `parse_args()`, `main()`. Read the module, not this block.
+>
+> Revisit when the server track builds `POST /arena-reports`, or when bot development resumes. Recorded rather than deleted so the requirement survives the deferral.
+
 ```python
 from dataclasses import dataclass
 from typing import List, Dict, Optional

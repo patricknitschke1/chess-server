@@ -454,7 +454,7 @@ async def supervise_ticker():
 
 - `RefRandomBot`, `RefGreedyBot`, `RefDepth2Bot`
 - Each implements `choose_move(board, clock) -> chess.Move`
-- Registered at startup with `is_anchor=1`, fixed ratings (measured from calibration), never change
+- Registered at startup with `is_anchor=1`, fixed ratings, never change. The rating values are **provisional placeholders**, not measurements — calibration is deferred (design §21). Nothing here depends on them being right; do not block on calibrating them.
 - Paired only when a competitor would otherwise sit idle, and only within ±400 rating (§9.3)
 
 **`mailbox.py`** — per-bot delivery mailbox and poll waiters:
@@ -1039,7 +1039,7 @@ Every function call by name from Part 1 of interfaces:
 ### From `chess_core/elo.py`:
 - `compute_rating_exchange(winner_rating, loser_rating) -> (RatingUpdate, RatingUpdate)`
 - `compute_draw_exchange(white_rating, black_rating) -> (RatingUpdate, RatingUpdate)`
-- `compute_one_sided_exchange(competitor_rating, anchor_rating, competitor_won) -> RatingUpdate`
+- `compute_one_sided_exchange(competitor_rating, anchor_rating, competitor_score: float) -> RatingUpdate` — `competitor_score` is 1.0 win, 0.5 draw, 0.0 loss. Anchor draws **are** rated (§10.3); do not branch around them.
 - `STARTING_RATING`, `K_FACTOR`
 
 ### From `chess_core/matchmaker.py`:
