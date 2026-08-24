@@ -400,7 +400,14 @@ EXHIBITION_INCREMENT_NS: int = 10_000_000_000      # 10 seconds
 DELIVERY_GRACE_NS: int = 15_000_000_000       # 15 seconds
 AGENT_DELIVERY_GRACE_NS: int = 60_000_000_000 # 60 seconds
 AGENT_AUTO_RELEASE_NS: int = 45_000_000_000   # 45 seconds
+POLL_RECENCY_NS: int = 5_000_000_000          # pool eligibility window (§9.1)
+CHALLENGE_TTL_NS: int = 60_000_000_000        # open challenge lifetime (§12)
+POLL_HOLD_NS: int = 20_000_000_000            # server long-poll hold (§8.4)
+TICK_INTERVAL_NS: int = 1_000_000_000         # ticker period (§4.6)
 ```
+
+This block is the complete `clock.py` set from design §5.2. `clock.py` is the sole
+declaration site; `chess_server` imports these and declares none of them itself.
 
 ### `chess_core/elo.py`
 
