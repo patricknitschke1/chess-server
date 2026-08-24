@@ -262,7 +262,7 @@ Two things, together because they are the same defect class.
 
 Methods per role spec §3.6. `update_pool_history(bot_id, last_color, last_opponent_id, increment_white)` is the §9.3 writer.
 
-`list_pool_candidates` takes a **precomputed `cutoff_mono`** parameter and compares (`last_poll_mono >= :cutoff_mono`); it does not compute the cutoff. Role spec §1.2 forbids `chess_server/` from subtracting two monotonic timestamps, and no `chess_core` predicate exists for `POLL_RECENCY_NS` — see Gaps, G1. Its filter is role spec §9.1: `role IN ('competitor','anchor')`, no `seats` row, `controller='client'`, and the recency clause **for `role='competitor'` only**.
+`list_pool_candidates` takes a `cutoff_mono` parameter and compares (`last_poll_mono >= :cutoff_mono`); it does not compute the cutoff. The caller obtains it from **`chess_core.clock.window_start_mono(now_mono, POLL_RECENCY_NS)`** — role spec §1.2 forbids `chess_server/` from subtracting two monotonic timestamps, and that helper is how the rule is kept without pushing the subtraction into 3b. Its filter is role spec §9.1: `role IN ('competitor','anchor')`, no `seats` row, `controller='client'`, and the recency clause **for `role='competitor'` only**.
 
 **Tests first:**
 
@@ -409,7 +409,7 @@ Methods per role spec §3.6. `update_pool_history(bot_id, last_color, last_oppon
 
 `insert_challenge`, `cas_set_status`, `get_by_id`, `get_open_outgoing`, `list_inbox`, `list_queued`, `list_expired_open`, `expire_all_non_terminal`.
 
-`insert_challenge` writes **both** `created_at` (wall TEXT, display) and `created_mono` (monotonic ns, TTL) — role spec §3.3. `list_expired_open(cutoff_mono)` takes a precomputed cutoff for the same reason as task 8 (Gaps, G1). `cas_set_status` CASes on the status being left and calls `assert_cas`. `expire_all_non_terminal(reason)` is recovery's helper and is exercised again in task 15.
+`insert_challenge` writes **both** `created_at` (wall TEXT, display) and `created_mono` (monotonic ns, TTL) — role spec §3.3. `list_expired_open(cutoff_mono)` takes a cutoff for the same reason as task 8, obtained from `window_start_mono(now_mono, CHALLENGE_TTL_NS)`. `cas_set_status` CASes on the status being left and calls `assert_cas`. `expire_all_non_terminal(reason)` is recovery's helper and is exercised again in task 15.
 
 **Tests first:**
 
@@ -519,7 +519,7 @@ Deliberately **not** done in 3a, and owned by 3b: the ticker, savepoint-per-tick
 
 Each of these is a decision the plan makes explicitly rather than leaving to be invented at the keyboard. Raise any of them that looks wrong before starting the affected task.
 
-**G1 (RESOLVED — `chess_core.clock.is_within(earlier_mono, now_mono, window_ns)` now exists, is tested and is re-exported; repositories take a predicate rather than a precomputed cutoff, and `chess_server` still never subtracts monotonic timestamps.)** ~~G1. No `chess_core` predicate exists for `POLL_RECENCY_NS` or `CHALLENGE_TTL_NS`.** Role spec §1.2 forbids `chess_server/` from subtracting two monotonic timestamps, and `chess_core.clock` supplies `has_flagged` and `check_delivery_timeout` but nothing for poll recency or challenge TTL. **Plan's decision:** repositories take a precomputed `cutoff_mono` and compare rather than subtract; the subtraction lands in the ticker in 3b. **Better fix, and the one to prefer if the chess-domain track has capacity:** add `is_within(now_mono, then_mono, window_ns) -> bool` to `chess_core.clock`, exactly as `remaining_ns` was added for the flag predicate in round 6. Until then, 3b will contain two monotonic subtractions that §1.2 forbids.
+**G1. RESOLVED.** `chess_core.clock` now provides `is_within(earlier_mono, now_mono, window_ns)` for in-process checks and `window_start_mono(now_mono, window_ns)` for SQL bounds. Both are tested and re-exported. Tasks 8 and 13 use `window_start_mono`, so no monotonic subtraction lands in `chess_server/` in 3a or 3b.
 
 **G2. `challenges.created_mono` is in the role spec and not in design §5.1.** The role spec declares the design spec authoritative on disagreement, which read literally deletes the fix for review finding M12. The column is necessary — a TTL cannot be measured against a wall-clock `TEXT`. **Plan's decision:** build the column; design §5.1's `challenges` line needs the same edit. Same for the three `bots` pool-history columns, which design §9.3 mandates in prose while design §5.1's column list omits them.
 

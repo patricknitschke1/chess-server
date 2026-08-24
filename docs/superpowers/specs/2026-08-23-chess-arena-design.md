@@ -184,7 +184,7 @@ All display timestamps are UTC wall clock. **All elapsed arithmetic uses `time.m
 - `last_color`, `white_count`, `last_opponent_id` are the §9.4 pool-history fields. They live here, denormalised and updated in the finalising transaction, because `pair_bots` needs them every tick and deriving them from `games` is an O(games) scan three times over that three builders would derive three ways.
 
 **`games`**
-`id, white_bot_id, black_bot_id, status, result, termination, fen, ply,
+`id, white_bot_id, black_bot_id, status, result, termination, fen, ply, to_move,
  white_ms, black_ms, time_control_ms, increment_ms,
  to_move_since_mono, turn_started_mono, delivered_to_mover,
  rated, source, white_strikes, black_strikes, created_at, started_at, ended_at`

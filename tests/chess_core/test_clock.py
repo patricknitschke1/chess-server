@@ -489,3 +489,13 @@ def test_is_within_boundary_is_inclusive():
     assert clock.is_within(now - window + 1, now, window) is True
     assert clock.is_within(now - window, now, window) is True
     assert clock.is_within(now - window - 1, now, window) is False
+
+
+def test_window_start_mono_agrees_with_is_within():
+    """A SQL bound and the in-process predicate must not disagree at the edge."""
+    now = 10_000_000_000
+    window = 5_000_000_000
+    cutoff = clock.window_start_mono(now, window)
+
+    for value in (cutoff - 1, cutoff, cutoff + 1, now):
+        assert (value >= cutoff) is clock.is_within(value, now, window)

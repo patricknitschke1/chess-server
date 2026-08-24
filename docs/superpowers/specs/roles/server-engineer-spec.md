@@ -124,9 +124,9 @@ CREATE TABLE bots (
   last_agent_action_mono INTEGER,
   last_poll_at           TEXT,
   last_poll_mono         INTEGER,
-  last_color             TEXT,                          -- 'white' | 'black' | NULL   (§9.3)
-  white_count            INTEGER NOT NULL DEFAULT 0,    --                            (§9.3)
-  last_opponent_id       INTEGER REFERENCES bots(id),   --                            (§9.3)
+  last_color             TEXT,                          -- 'white' | 'black' | NULL   (design §9.4)
+  white_count            INTEGER NOT NULL DEFAULT 0,    --                            (design §9.4)
+  last_opponent_id       INTEGER REFERENCES bots(id),   --                            (design §9.4)
   created_at             TEXT    NOT NULL
 );
 CREATE INDEX idx_bots_token_hash ON bots(token_hash);
@@ -236,7 +236,7 @@ Design §21 defers the whole `arena_reports` vertical — table, repository, ret
 - `RatingHistoryRepo` — `insert_rating_change`, `sum_deltas_by_bot`, `list_points_for_bot`
 - `ChallengeRepo` — `insert_challenge`, `cas_set_status`, `get_by_id`, `get_open_outgoing`, `list_inbox`, `list_queued`, `list_expired_open`, `expire_all_non_terminal`
 
-`update_pool_history(bot_id, last_color, last_opponent_id, increment_white)` is the §9.3 writer and is called only from the terminal-transition path (§6.5).
+`update_pool_history(bot_id, last_color, last_opponent_id, increment_white)` is the design §9.4 writer and is called only from the terminal-transition path (§6.5).
 
 ### 3.7 The write lock and the transaction
 
@@ -517,7 +517,7 @@ Nothing needs to survive a restart, because §8.6 aborts every game anyway.
 2. **Apply rule 1 of design §5.3, and only rule 1.** `rated` was written at creation from rules 2–6 (§7.2). The terminations `no_show`, `server_restart` and `admin_abort` set `rated = 0`. Nothing else touches `rated`, and it can only move from 1 to 0, never back.
 3. **Rate the game** if `rated = 1` — see §6.6.
 4. **Update `bots` counters** for both participants: `games_played + 1` and one of `wins` / `losses` / `draws`. Anchors' counters update too. This is deliberate: `pair_bots` sorts by `games_played` ascending, so a busy anchor sinks to the end of the sort, which reinforces design §9.3's "only when a competitor would otherwise sit idle" rather than fighting it. Only the anchor's *rating* is fixed.
-5. **Update pool history** (§9.3) for both participants: `last_color`, `last_opponent_id`, and `white_count + 1` for whoever had White. This runs on **every** terminal transition including aborts, because both consume a seat and both mean "that bot's last game was against X as colour Y" — which also stops a bot being instantly re-paired with an opponent that just failed to show up.
+5. **Update pool history** (design §9.4) for both participants: `last_color`, `last_opponent_id`, and `white_count + 1` for whoever had White. This runs on **every** terminal transition including aborts, because both consume a seat and both mean "that bot's last game was against X as colour Y" — which also stops a bot being instantly re-paired with an opponent that just failed to show up.
 6. **Delete both `seats` rows.**
 7. **Via `txn.defer`:** clear both mailboxes, drop the history-cache entry, drop both bots' `unpaired_ticks` entries, wake both waiters.
 8. **Buffer `game_ended`**, plus one `rating_changed` per `rating_history` row actually inserted.
@@ -601,7 +601,7 @@ Waiters are woken in the post-commit flush, not inside the transaction, for the 
 4. **Offer anchors to whoever `pair_bots` left idle.** For each unpaired competitor, in `(games_played, rating, bot_id)` order — which is what design §9.3's "fewest-games eligible bot" means — try each remaining anchor in order of `|rating − anchor.rating|` and take the first for which `should_offer_anchor(competitor, anchor, has_other_pairing_option=False)` is true. `has_other_pairing_option` is `False` by construction: this bot was not paired by `pair_bots` this tick, which is precisely "would otherwise sit idle". Remove an anchor from the candidate list once used, so one anchor is not offered twice in a tick.
 5. Determine colours for an anchor pairing by calling `pair_bots([competitor, anchor])` on that two-element pool and using the `Pairing` it returns. This keeps design §9.2's colour precedence — alternate from `last_color`, tie-break on `white_count`, then `bot_id` — in one place instead of reimplementing it here.
 6. For each pairing, in its own savepoint, `create_game_locked(..., RATED_TIME_CONTROL_NS, RATED_INCREMENT_NS, 'matchmaker')`.
-7. Reset `unpaired_ticks` to 0 for every bot paired; increment it for every bot that was in the pool snapshot and was not (§9.3).
+7. Reset `unpaired_ticks` to 0 for every bot paired; increment it for every bot that was in the pool snapshot and was not (design §9.4).
 
 **`should_offer_anchor` must be called.** `pair_bots` only prevents anchor-versus-anchor; the idle-only, fewest-games and ±`ANCHOR_RATING_WINDOW` rules of design §9.3 live entirely in `should_offer_anchor`, and a pairing loop that calls `pair_bots` alone enforces none of them.
 

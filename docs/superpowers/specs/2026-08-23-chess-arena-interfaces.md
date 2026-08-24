@@ -340,6 +340,15 @@ def deliver_position(
     """
     ...
 
+def window_start_mono(now_mono: int, window_ns: int) -> int:
+    """The oldest monotonic timestamp still inside `window_ns`.
+    
+    `is_within` cannot serve a SQL filter, which needs a bound to compare a
+    column against. Repositories use this so `chess_server` never subtracts
+    monotonic timestamps itself.
+    """
+    ...
+
 def is_within(earlier_mono: int, now_mono: int, window_ns: int) -> bool:
     """Whether `earlier_mono` is no more than `window_ns` ago.
     

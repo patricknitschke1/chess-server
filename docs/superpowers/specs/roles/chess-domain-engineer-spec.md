@@ -109,6 +109,7 @@ If your work requires opening a socket, reading the system clock (`time.monotoni
 2b. **Reading the clock without mutating it** (§6.4)
    - `remaining_ns(clock: ClockState, color: Color, now_mono: int) -> int`
    - `has_flagged(clock: ClockState, now_mono: int) -> bool` — the `<= 0` predicate
+   - `is_within(earlier_mono, now_mono, window_ns) -> bool` and `window_start_mono(now_mono, window_ns) -> int` — poll recency (§9.1) and challenge TTL (§12). The second exists because a SQL filter needs a bound, not a predicate.
    - These let §6.4's "flag precedes illegal-move validation" be asked *before* a move is validated. `account_move_and_switch` is atomic by design and cannot answer it without also mutating. `chess_server` must never subtract monotonic timestamps itself.
    - Must agree with `account_move_and_switch` exactly — pin that with a swept test, not a spot check.
 
