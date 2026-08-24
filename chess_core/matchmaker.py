@@ -1,8 +1,7 @@
 """Matchmaker pairing policy per §9.2.
 
-Pure function over explicit pool snapshots, seeded for determinism.
+Pure function over explicit pool snapshots.
 """
-import random
 from typing import List, Optional
 from chess_core.types import PoolEntry, Pairing, Color
 
@@ -24,18 +23,17 @@ def pair_bots(
     5. Color precedence: alternate from last_color; ties broken by white_count,
        then bot_id
     
-    Deterministic and seeded-testable.
+    Deterministic: the same pool always produces the same pairings.
     
     Args:
         pool: Snapshot of eligible bots
-        seed: Optional random seed for deterministic testing
+        seed: Currently unused. §9.2 pairing has no random component, so the
+            result does not depend on it. Retained because the signature is
+            pinned in the interfaces document.
     
     Returns:
         List of Pairing objects (white_bot_id, black_bot_id)
     """
-    if seed is not None:
-        random.seed(seed)
-    
     if len(pool) < 2:
         return []
     
@@ -65,13 +63,9 @@ def pair_bots(
         pairing = _make_pairing(a, eligible[matched])
         pairings.append(pairing)
         
-        # Remove both from eligible (in reverse order to preserve indices)
-        if matched > i:
-            eligible.pop(matched)
-            eligible.pop(i)
-        else:
-            eligible.pop(i)
-            eligible.pop(matched)
+        # matched > i always (j starts at i+1); pop the higher index first
+        eligible.pop(matched)
+        eligible.pop(i)
         # i is not incremented: the list shifted, so eligible[i] is a new bot
     
     return pairings

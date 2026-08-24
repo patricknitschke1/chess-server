@@ -1,6 +1,8 @@
 """Tests for matchmaker pairing policy per §9.2."""
+import random
+
 import chess_core.matchmaker as matchmaker
-from chess_core.types import PoolEntry, Color
+from chess_core.types import PoolEntry, Pairing, Color
 
 
 # Failure path tests: edge cases
@@ -180,35 +182,47 @@ def test_colour_precedence_tie_break_by_bot_id():
     assert pairings[0].black_bot_id == 2
 
 
-def test_seeded_determinism():
-    """Same pool + same seed → identical pairings per §9.2."""
+def test_pairing_is_deterministic_and_ignores_seed():
+    """§9.2 pairing has no random component: the seed cannot change the result.
+
+    Pinned as an exact expected list rather than a self-comparison, so a
+    matchmaker that shuffled its input would fail rather than agree with itself.
+    """
     pool = [
         PoolEntry(1, "alice", 1200, 5, False, Color.WHITE, 3, None, 0),
         PoolEntry(2, "bob", 1250, 5, False, Color.BLACK, 2, None, 0),
         PoolEntry(3, "charlie", 1150, 5, False, Color.WHITE, 3, None, 0),
         PoolEntry(4, "dave", 1300, 5, False, Color.BLACK, 2, None, 0),
     ]
-    
-    pairings1 = matchmaker.pair_bots(pool, seed=42)
-    pairings2 = matchmaker.pair_bots(pool, seed=42)
-    
-    assert pairings1 == pairings2
 
-
-def test_seeded_different_seeds_different_pairings():
-    """Different seeds can produce different pairings."""
-    pool = [
-        PoolEntry(1, "alice", 1200, 5, False, Color.WHITE, 3, None, 0),
-        PoolEntry(2, "bob", 1200, 5, False, Color.BLACK, 2, None, 0),
-        PoolEntry(3, "charlie", 1200, 5, False, Color.WHITE, 3, None, 0),
-        PoolEntry(4, "dave", 1200, 5, False, Color.BLACK, 2, None, 0),
+    # Sorted by rating asc (games_played ties): charlie(3), alice(1), bob(2), dave(4).
+    # Colours: charlie/alice both last played White, so bot_id breaks the tie.
+    expected = [
+        Pairing(white_bot_id=1, black_bot_id=3),
+        Pairing(white_bot_id=2, black_bot_id=4),
     ]
-    
-    pairings1 = matchmaker.pair_bots(pool, seed=42)
-    pairings2 = matchmaker.pair_bots(pool, seed=99)
-    
-    # May differ (not guaranteed, but likely with different seeds)
-    # This test just verifies seeding works, not that results differ
+
+    assert matchmaker.pair_bots(pool) == expected
+    assert matchmaker.pair_bots(pool, seed=42) == expected
+    assert matchmaker.pair_bots(pool, seed=99) == expected
+
+
+def test_pair_bots_does_not_mutate_the_global_rng():
+    """chess_core stays pure: pairing must not touch process-global state."""
+    random.seed(0)
+    before = random.random()
+
+    random.seed(0)
+    matchmaker.pair_bots(
+        [
+            PoolEntry(1, "alice", 1200, 5, False, Color.WHITE, 3, None, 0),
+            PoolEntry(2, "bob", 1250, 5, False, Color.BLACK, 2, None, 0),
+        ],
+        seed=999,
+    )
+    after = random.random()
+
+    assert before == after
 
 
 # Anchor gating tests
