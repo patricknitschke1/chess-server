@@ -454,7 +454,7 @@ def compute_draw_exchange(
 def compute_one_sided_exchange(
     competitor_rating: int,
     anchor_rating: int,
-    competitor_won: bool
+    competitor_score: float
 ) -> RatingUpdate:
     """Compute one-sided Elo update against a fixed anchor per §10.3.
     
@@ -464,7 +464,8 @@ def compute_one_sided_exchange(
     Args:
         competitor_rating: Competitor's current rating
         anchor_rating: Fixed anchor rating
-        competitor_won: True if competitor won, False if lost
+        competitor_score: 1.0 win, 0.5 draw, 0.0 loss — the S term of
+            R' = R + K(S - E). Raises ValueError on any other value.
     
     Returns:
         RatingUpdate for competitor only

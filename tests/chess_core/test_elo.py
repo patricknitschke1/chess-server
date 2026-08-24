@@ -4,6 +4,8 @@ The zero-sum property test is the critical one. Swap symmetry is NOT a property
 of Elo and is not tested: an upset (1000 beats 1400) moves 22 points, the
 expected result (1400 beats 1000) moves 2.
 """
+import pytest
+
 import chess_core.elo as elo
 
 
@@ -112,7 +114,7 @@ def test_one_sided_exchange_competitor_only():
     competitor_update = elo.compute_one_sided_exchange(
         competitor_rating=1200,
         anchor_rating=1000,
-        competitor_won=True
+        competitor_score=1.0
     )
     
     # Competitor gains points
@@ -125,11 +127,47 @@ def test_one_sided_exchange_competitor_loses():
     competitor_update = elo.compute_one_sided_exchange(
         competitor_rating=1200,
         anchor_rating=1000,
-        competitor_won=False
+        competitor_score=0.0
     )
     
     # Competitor loses points
     assert competitor_update.delta < 0
+
+
+def test_one_sided_draw_costs_the_favourite_and_pays_the_underdog():
+    """A draw against an anchor is rated, and its sign follows the gap."""
+    stronger = elo.compute_one_sided_exchange(
+        competitor_rating=1400, anchor_rating=1000, competitor_score=0.5
+    )
+    weaker = elo.compute_one_sided_exchange(
+        competitor_rating=1000, anchor_rating=1400, competitor_score=0.5
+    )
+    level = elo.compute_one_sided_exchange(
+        competitor_rating=1200, anchor_rating=1200, competitor_score=0.5
+    )
+    
+    assert stronger.delta < 0
+    assert weaker.delta > 0
+    assert level.delta == 0
+
+
+def test_one_sided_draw_sits_between_a_win_and_a_loss():
+    """Without this, drawing every game against an anchor would be free."""
+    args = dict(competitor_rating=1100, anchor_rating=1300)
+    win = elo.compute_one_sided_exchange(**args, competitor_score=1.0).delta
+    draw = elo.compute_one_sided_exchange(**args, competitor_score=0.5).delta
+    loss = elo.compute_one_sided_exchange(**args, competitor_score=0.0).delta
+    
+    assert loss < draw < win
+
+
+def test_one_sided_exchange_rejects_a_score_that_is_not_a_chess_result():
+    """A bare float parameter invites 2.0 or True; only three values are legal."""
+    for bad in (2.0, -1.0, 0.25):
+        with pytest.raises(ValueError, match="competitor_score"):
+            elo.compute_one_sided_exchange(
+                competitor_rating=1200, anchor_rating=1000, competitor_score=bad
+            )
 
 
 def test_one_sided_exchange_shrinks_near_anchor():
@@ -138,14 +176,14 @@ def test_one_sided_exchange_shrinks_near_anchor():
     far_update = elo.compute_one_sided_exchange(
         competitor_rating=600,
         anchor_rating=1000,
-        competitor_won=True
+        competitor_score=1.0
     )
     
     # Competitor near anchor
     near_update = elo.compute_one_sided_exchange(
         competitor_rating=980,
         anchor_rating=1000,
-        competitor_won=True
+        competitor_score=1.0
     )
     
     assert far_update.delta > near_update.delta

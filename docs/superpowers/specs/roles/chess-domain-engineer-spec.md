@@ -167,7 +167,7 @@ If your work requires opening a socket, reading the system clock (`time.monotoni
    - Exchange is **zero-sum**. Equal ratings move nothing
 
 3. **One-sided exchange against anchors** (§10.3)
-   - `compute_one_sided_exchange(competitor_rating: int, anchor_rating: int, competitor_won: bool) -> RatingUpdate`
+   - `compute_one_sided_exchange(competitor_rating: int, anchor_rating: int, competitor_score: float) -> RatingUpdate`
    - Anchor rating **never changes**
    - Net injection per game, but shrinks toward zero as competitor approaches anchor
 
@@ -322,7 +322,7 @@ All signatures are pinned in **Interfaces Part 1**. Bind to them; do not invent 
 **From elo.py:**
 - `compute_rating_exchange(winner_rating, loser_rating) -> (RatingUpdate, RatingUpdate)`
 - `compute_draw_exchange(white_rating, black_rating) -> (RatingUpdate, RatingUpdate)`
-- `compute_one_sided_exchange(competitor_rating, anchor_rating, competitor_won) -> RatingUpdate`
+- `compute_one_sided_exchange(competitor_rating, anchor_rating, competitor_score) -> RatingUpdate`
 - Constants: `STARTING_RATING`, `K_FACTOR`
 
 **From matchmaker.py:**

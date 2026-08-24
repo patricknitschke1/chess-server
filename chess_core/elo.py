@@ -98,7 +98,7 @@ def compute_draw_exchange(
 def compute_one_sided_exchange(
     competitor_rating: int,
     anchor_rating: int,
-    competitor_won: bool
+    competitor_score: float
 ) -> RatingUpdate:
     """Compute one-sided Elo update against a fixed anchor per §10.3.
     
@@ -108,19 +108,24 @@ def compute_one_sided_exchange(
     Args:
         competitor_rating: Competitor's current rating
         anchor_rating: Fixed anchor rating
-        competitor_won: True if competitor won, False if lost
+        competitor_score: 1.0 win, 0.5 draw, 0.0 loss — the S term of
+            R' = R + K(S - E). Draws are rated: they are 8-12 of every 24
+            anchor games, and making them free would make shuffling free.
     
     Returns:
         RatingUpdate for competitor only
+    
+    Raises:
+        ValueError: if competitor_score is not 1.0, 0.5 or 0.0
     """
-    # Expected score for competitor
+    if competitor_score not in (1.0, 0.5, 0.0):
+        raise ValueError(
+            f"competitor_score must be 1.0 (win), 0.5 (draw) or 0.0 (loss), "
+            f"got {competitor_score!r}."
+        )
+    
     expected = 1 / (1 + 10 ** ((anchor_rating - competitor_rating) / 400))
-    
-    # Actual score
-    actual = 1.0 if competitor_won else 0.0
-    
-    # Delta
-    delta = round(K_FACTOR * (actual - expected))
+    delta = round(K_FACTOR * (competitor_score - expected))
     
     return RatingUpdate(
         rating_before=competitor_rating,
