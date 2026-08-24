@@ -1,6 +1,7 @@
 """Arena tests — placeholder for next task."""
 import pytest
 import chess
+from pathlib import Path
 from chess_client import ClockView
 from ref_bots.ref_random import choose_move as ref_random_choose_move
 from ref_bots.ref_greedy import choose_move as ref_greedy_choose_move
@@ -534,3 +535,73 @@ def test_arena_replay_missing_file_errors_actionably(tmp_path, capsys):
         main(['--replay', '1', '--pgn', str(tmp_path / "nope.pgn")])
 
     assert "--pgn" in capsys.readouterr().err
+
+
+STARTER_KIT = Path(__file__).resolve().parent.parent.parent / "starter-kit"
+
+
+def _run_arena(seed: int, pgn_path) -> str:
+    """Run a two-game arena through main() and return the exported PGN text."""
+    from arena import main
+
+    main([
+        '--bots',
+        str(STARTER_KIT / "ref_bots" / "ref_random.py"),
+        str(STARTER_KIT / "ref_bots" / "ref_greedy.py"),
+        '--games', '2',
+        '--seed', str(seed),
+        '--pgn', str(pgn_path),
+    ])
+    return Path(pgn_path).read_text()
+
+
+def test_arena_same_seed_produces_identical_games(tmp_path):
+    """One seed replays a whole arena run exactly.
+
+    Openings take an explicit generator and ref_random reaches for the global
+    random module, so this only holds if main seeds both.
+    """
+    first = _run_arena(4242, tmp_path / "a.pgn")
+    second = _run_arena(4242, tmp_path / "b.pgn")
+
+    assert first == second
+
+
+def test_arena_different_seeds_produce_different_games(tmp_path):
+    """Different seeds diverge, so "100 games" is 100 games and not one repeated."""
+    first = _run_arena(1, tmp_path / "a.pgn")
+    second = _run_arena(2, tmp_path / "b.pgn")
+
+    assert first != second
+
+
+def test_arena_seeded_run_reproduces_moves_and_results(tmp_path, capsys):
+    """The determinism holds at the level attendees care about: moves and results."""
+    import random
+    from arena import run_single_game, build_schedule
+    from opening_book import select_opening
+    from ref_bots.ref_random import choose_move as random_move
+    from ref_bots.ref_greedy import choose_move as greedy_move
+    from chess_core import RATED_TIME_CONTROL_NS, RATED_INCREMENT_NS
+
+    bots = {'ref_random': random_move, 'ref_greedy': greedy_move}
+
+    def play(seed):
+        rng = random.Random(seed)
+        random.seed(seed)
+        games = []
+        for white, black in build_schedule(list(bots), 2):
+            games.append(run_single_game(
+                white_bot=bots[white],
+                black_bot=bots[black],
+                white_name=white,
+                black_name=black,
+                time_control_ns=RATED_TIME_CONTROL_NS,
+                increment_ns=RATED_INCREMENT_NS,
+                opening_fen=select_opening(rng),
+                verbose=False,
+            ))
+        return [(g.moves_uci, g.result) for g in games]
+
+    assert play(77) == play(77)
+    assert play(77) != play(78)
