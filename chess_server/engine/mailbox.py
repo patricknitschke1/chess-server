@@ -88,6 +88,11 @@ async def deliver_for_poll(deps: EngineDeps, bot_id: int) -> Optional[GameRow]:
         return delivered
 
 
+def take_payload(bot_id: int, game: GameRow) -> Optional[TurnPayload]:
+    """Remove the payload and hand it over, or drop it on the floor."""
+    return state.mailbox.pop(bot_id, None)
+
+
 @dataclass
 class Waiter:
     event: asyncio.Event
