@@ -25,7 +25,8 @@ Every §-level requirement in the design spec is claimed by exactly one role, ex
 | §9 matchmaking | `chess-domain-engineer` (§9.2/9.3 policy) | `server-engineer` (§9.1 eligibility) |
 | §10 rating | `chess-domain-engineer` (math), `server-engineer` (application) | `dashboard-engineer` (presentation) |
 | §11 time control | `server-engineer` (per-game columns) | `client-engineer`, `mcp-engineer`, `workshop-author` |
-| §13 MCP | `mcp-engineer` | `workshop-author` (documents it) |
+| §13 MCP | `mcp-engineer` (tool surface) | `workshop-author` (documents it) |
+| §13.3 control handoff | `server-engineer` (`POST /bots/me/control` and the routes behind it) | `mcp-engineer` (tools), `client-engineer` (SDK idling) |
 | §14 SSE | `server-engineer` (emits) | `dashboard-engineer` (consumes) |
 | §17 arena | `client-engineer` (builds) | `workshop-author` (documents) |
 | §4.6 health | `server-engineer` (endpoint) | `dashboard-engineer` (banner) |

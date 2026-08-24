@@ -1,5 +1,14 @@
 # Dashboard Engineer — Role Specification
 
+> **Revision 5 errata — binding, and they override anything below that disagrees.**
+> Applied from [the round-4 review](../../../../agent-reports/2026-08-24-spec-review-round4.md). Where this spec and design spec revision 5 conflict, **the design spec wins**.
+>
+> 1. **"Featured" belongs to the server; your click-to-watch is "watching".** The server picks the Big Screen featured game with a 20s minimum hold. Clicking a grid cell in My Bot mode sets *local view state only* and must never be called featured anywhere in code, UI or docs. Two authorities sharing one name is how a projector ends up fighting a mouse click.
+> 2. **Render every attendee-controlled string with `textContent`.** Bot names, owners, `candidate_name`, `opponent_name`, and `?bot=` — never interpolated into an HTML template literal, never `innerHTML`. `?bot=` is attacker-supplied by definition.
+> 3. **Colour from the `rated` field as delivered.** `rated` is now correct from creation (design §5.3), so an exhibition game no longer renders green mid-game and flips amber in the ticker.
+> 4. **Delete every remaining reference to `arena.py --serve`.** Local stats arrive via `arena_report_posted` and `GET /bots/{bot_id}/arena-reports`; the override replaced `--serve` rather than joining it.
+> 5. `ActiveGameSummary` now carries `fen`, `to_move` and `status` — render from those rather than reconstructing.
+
 **Role:** dashboard-engineer  
 **Date:** 2026-08-24  
 **Owns:** `web/`  

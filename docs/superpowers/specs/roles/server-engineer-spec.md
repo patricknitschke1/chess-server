@@ -1,5 +1,19 @@
 # Server Engineer Role Specification
 
+> **Revision 5 errata — binding, and they override anything below that disagrees.**
+> Applied from [the round-4 review](../../../../agent-reports/2026-08-24-spec-review-round4.md). Where this spec and design spec revision 5 conflict, **the design spec wins**.
+>
+> 1. **Delivery has exactly two call sites, and you own both.** `GET /bots/me/turn` delivers for `controller='client'`; `get_legal_moves()` (via its route) delivers for `controller='agent'`. `get_game()` never delivers. Nothing in the ticker delivers. Revision 4 defined `deliver_position()` and called it from nowhere — every paired game would have died `no_show` at ply 0.
+> 2. **`write_lock` is acquired at exactly one place per call stack.** Every mutating helper needs an inner `*_locked` form; the ticker calls only those. A nested `async with` on an `asyncio.Lock` wedges the coroutine forever, silently, and §4.6's error counter stays at zero. Verified by execution.
+> 3. **Buffer SSE events inside the transaction; flush after commit, discard on rollback.**
+> 4. **You own these routes**, which revision 4 left described only in the MCP and interfaces documents: `POST /bots/me/control`, `GET /bots/me`, `GET /games/{id}/moves`, `GET /bots/{bot_id}/rating_history`. `mcp-engineer` consumes them and implements none of them.
+> 5. **`rated` is written at creation** from §5.3 rules 2–6; only rule 1's terminations may flip it to 0.
+> 6. **Restore the `controller='client'` check** on challenge creation *and* consumption.
+> 7. **`seats.bot_id` is `INTEGER PRIMARY KEY NOT NULL`** — without `NOT NULL` SQLite accepts a NULL and auto-assigns a rowid, so the invariant does not hold.
+> 8. **Arena report retention orders by `id DESC`, never `created_at`.** With tied timestamps, `created_at` ordering deletes the *newest* rows. Verified.
+> 9. **Validate `name`, `owner`, `candidate_name`, `opponent_name` against `^[A-Za-z0-9 _-]{1,32}$`**, and bound the arena-report numerics semantically (`wins + draws + losses == games`, non-negative, `games <= 10000`).
+> 10. Use the canonical constants in design §5.2. There is no `TIME_CONTROL_MS`.
+
 **Date:** 2026-08-24  
 **Role:** server-engineer  
 **Owns:** `chess_server/store/`, `chess_server/engine/`, `chess_server/api/`, `tests/chess_server/`  

@@ -1,5 +1,15 @@
 # Client Engineer — Role Specification
 
+> **Revision 5 errata — binding, and they override anything below that disagrees.**
+> Applied from [the round-4 review](../../../../agent-reports/2026-08-24-spec-review-round4.md). Where this spec and design spec revision 5 conflict, **the design spec wins**.
+>
+> 1. **Remove the resign-on-illegal-move behaviour.** An illegal move is a three-strike path owned by the server (§8.3); resigning on the client turns a recoverable bug into a lost game and hides the diagnostic.
+> 2. **Add back-off on repeated `superseded` responses** so two accidentally-running clients cannot spin.
+> 3. **`arena.py --serve` does not exist.** Local stats reach the dashboard via `--report` → `POST /arena-reports`. Delete any reference to a local web view.
+> 4. **Arena report payloads must satisfy `wins + draws + losses == games`**, non-negative, `games <= 10000`; the server rejects otherwise with `422`.
+> 5. `join_code` is a required registration parameter.
+> 6. Use the canonical constants in design §5.2; the SDK reads time control from the turn payload and never assumes 3+2.
+
 **Date:** 2026-08-24
 **Parent spec:** [2026-08-23-chess-arena-design.md](../2026-08-23-chess-arena-design.md)
 **Interfaces:** [2026-08-23-chess-arena-interfaces.md](../2026-08-23-chess-arena-interfaces.md) Parts 1, 3, 5

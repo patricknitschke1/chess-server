@@ -38,6 +38,9 @@ starter-kit/     What attendees clone. bot.py is the only file they edit.
 - **No untrusted code runs on the server.** Bots are client-side. The only exception is `chess_server/engine/reference_bots.py`, which we wrote.
 - **Every game-state transition is compare-and-swap on the state you are transitioning _from_** — moves, flags, finalisation, abort, reset. Assert `rowcount == 1`; on 0, roll back and abandon the work. This is what makes double-finalisation impossible.
 - **All game mutation happens under the single `store.write_lock`, and a critical section is a transaction.** `BEGIN IMMEDIATE` on acquire, exactly one commit or rollback before release, shielded from cancellation.
+- **`write_lock` is acquired at exactly one place per call stack.** Every mutating helper has an inner `*_locked` form that assumes the lock and never acquires it; the ticker calls only those. `asyncio.Lock` is not re-entrant — a nested acquire wedges the coroutine silently, raising nothing.
+- **No SSE event is visible before the transaction that produced it commits.** Buffer inside the critical section, flush after commit, discard on rollback.
+- **Attendee-controlled strings are validated server-side and rendered with `textContent`.** Bot names, owners and arena labels reach a projector; `innerHTML` never touches them.
 - **One non-terminal game per bot is enforced by the `seats` table**, not by application logic and not by partial indexes.
 - **Every route handler is `async def`.** Only `sqlite3` calls enter a thread — a sync handler can deadlock against the writer.
 - **Elapsed time is `time.monotonic_ns()`, never wall clock.** A laptop suspend must not flag the board.

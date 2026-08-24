@@ -1,9 +1,11 @@
 # Chess Arena — Design
 
 **Date:** 2026-08-23
-**Revision:** 4 (harmonized across all role specs)
-**Status:** Phases 1–3 cleared to build; harmonization complete
+**Revision:** 5 (round-4 adversarial review applied)
+**Status:** Phases 1–3 cleared to build
 **Purpose:** A chess bot competition server for an agentic AI workshop (~20 attendees), doubling as a reference example of an agentic repository.
+
+**What revision 5 addresses** (from [the round-4 review](../../../agent-reports/2026-08-24-spec-review-round4.md)): the delivery trigger is now named and exclusive (§6.2), so games actually start; `write_lock` is acquired at exactly one place per call stack (§4.1), so the ticker cannot deadlock against itself; SSE events are buffered and flushed after commit (§4.1); the control-handoff and analysis endpoints have a producer (§8.1); `rated` is written at creation (§5.1); attendee-controlled strings are constrained and escaped (§8.5, §14); the flag predicate is `remaining_ns <= 0` (§6.4); `seats.bot_id` is `NOT NULL` (§4.3); arena-report retention orders by `id` (§5); the matchmaker is an algorithm (§9.2); and a canonical constants table exists (§5.2).
 
 **Companion document:** [2026-08-23-chess-arena-interfaces.md](2026-08-23-chess-arena-interfaces.md) pins the module boundaries this spec describes — `chess_core` signatures, the SSE event catalog, the bot/SDK surface, HTTP request/response models, MCP tool contracts, and test conventions. This spec says *what and why*; the interfaces document says *exactly what the seams look like*, so tracks can be built in parallel without inventing conflicting APIs. Where the two disagree, this spec wins and the interfaces document is corrected.
 
@@ -75,6 +77,21 @@ The critical section is wrapped in `asyncio.shield` and no database call is canc
 
 Reads that inform writes happen inside the lock. Display-only reads may use a separate read connection outside it.
 
+**`write_lock` is acquired at exactly one place per call stack. Helpers never acquire it.**
+
+`asyncio.Lock` is not re-entrant and has no timeout: an inner `async with` inside an outer one never returns, the coroutine wedges on an await, raises nothing, and §4.6's error counter stays at zero. Verified by execution — this is the failure that silently stops the whole server, and it is invisible in review because the nested call looks like an ordinary function call.
+
+Therefore **every mutating helper exists in two forms**:
+
+- an inner `*_locked(conn, ...)` form that assumes the lock is held and the transaction is open, and never acquires anything;
+- a thin outer form that opens `critical_section(...)` and calls the inner one.
+
+Route handlers call the outer form. **The ticker, and any other code already inside a critical section, calls only the `_locked` forms.** This applies to delivery, move application, finalisation, forfeit, abort, seat deletion, rating application and challenge transitions without exception.
+
+**No SSE event is visible to any client before the transaction that produced it has committed.**
+
+Events are buffered inside the critical section and flushed after `COMMIT`; the buffer is discarded on `ROLLBACK` or `ROLLBACK TO SAVEPOINT`. Emitting inside the transaction lets a rolled-back pairing (§4.3) tell every browser about a game that `GET /games/{id}` then 404s, and consumes a `seq` for state that does not exist — which also defeats the gap check `/state`'s `event_id` depends on. The global `seq` is assigned at flush time, in commit order.
+
 ### 4.2 Compare-and-swap on every transition
 
 CAS applies to **every** game-state transition — move, flag, finalisation, abort, reset — not only move submission. The predicate names **the state being transitioned from**:
@@ -94,12 +111,14 @@ Replaced by an explicit table:
 
 ```sql
 CREATE TABLE seats (
-  bot_id  INTEGER PRIMARY KEY,
+  bot_id  INTEGER PRIMARY KEY NOT NULL REFERENCES bots(id),
   game_id INTEGER NOT NULL REFERENCES games(id)
 );
 ```
 
 Two rows are inserted in the **same transaction** as the game insert; both are deleted on any terminal transition. The primary key makes a bot in two games a constraint violation at the storage layer, which is where an invariant this important belongs.
+
+**`NOT NULL` is load-bearing and is not decoration.** In SQLite an `INTEGER PRIMARY KEY` column is a rowid alias and *accepts `NULL`*, silently auto-assigning the next rowid. Verified: `INSERT INTO seats(bot_id, game_id) VALUES (NULL, 7)` is accepted, stored as `(1, 7)`, and `PRAGMA foreign_key_check` reports clean — so a phantom row occupies bot 1's seat and bot 1 can never be paired again, with no constraint violation anywhere to notice.
 
 **Ordering and the failure path**, both verified against SQLite rather than assumed:
 
@@ -115,7 +134,7 @@ Two rows are inserted in the **same transaction** as the game insert; both are d
 
 - `moves`: `PRIMARY KEY (game_id, ply)`
 - `rating_history`: `UNIQUE (game_id, bot_id)`
-- `seats`: `PRIMARY KEY (bot_id)` (§4.3)
+- `seats`: `PRIMARY KEY (bot_id)`, declared `NOT NULL` (§4.3)
 - Index on `games(status)` — scanned every tick
 - Index on `bots(token_hash)` — see §16.2
 
@@ -139,7 +158,8 @@ Its silent death stops pairing and flagging while the server still looks healthy
 
 - The tick body is wrapped in `try/except Exception`, logs with the tick number, and continues. The loop never exits.
 - The supervisor watches **`last_tick_age_ms > 5000`**, not `task.done()`. A task wedged on an await is the more likely failure and `done()` never fires for it.
-- `GET /health` returns `{last_tick_age_ms, last_tick_duration_ms, active_games, pending_games, stalled_games, pooled_bots, held_polls, sse_clients, db_writable, consecutive_tick_errors}`.
+- **The supervisor acts, it does not only observe.** At `last_tick_age_ms > 5000` it logs a warning with the last tick number. At `last_tick_age_ms > 15000` it logs at **error** level and **cancels and restarts the ticker task**, logging the tick number it died on. A detector wired to no remediation is what turned a nested-lock bug into a lost afternoon; the restart is the remediation.
+- `GET /health` returns `{last_tick_age_ms, last_tick_duration_ms, active_games, pending_games, stalled_games, pooled_bots, held_polls, sse_clients, db_writable, consecutive_tick_errors, ticker_restarts}`.
 - The dashboard shows a red banner when `last_tick_age_ms > 5000`. The operator must see the heartbeat from the back of the room.
 
 ---
@@ -171,16 +191,48 @@ All display timestamps are UTC wall clock. **All elapsed arithmetic uses `time.m
 
 **`rating_history`** — `bot_id, game_id, rating_before, rating_after, delta, ts`, UNIQUE `(game_id, bot_id)`
 
-**`challenges`** — `id, challenger_bot_id, opponent_bot_id, status, time_control_ms, increment_ms, created_at, resolved_at, game_id`
-`status` ∈ `open | accepted | queued | consumed | declined | expired | cancelled`
+**`challenges`** — `id, challenger_bot_id, opponent_bot_id, status, time_control_ms, increment_ms, created_at, resolved_at, game_id, reason`
+`status` ∈ `open | queued | consumed | declined | expired`
 
-**`mailbox`** — `bot_id PK, payload_json, delivered_mono` (§8.4)
+Revision 4 carried seven values. `accepted` was never written (accept marks `queued` directly) and `cancelled` had no endpoint; both are deleted rather than left as states an implementer must reason about and a test must cover.
+
+**The mailbox is process state, not a table.** `mailbox: dict[int, TurnPayload]`, mutated inside the same critical section as the delivery UPDATE (§6.2). §7.1 clears it on every start and nothing outside the process reads it, so a table bought a write on the hottest path under `write_lock` and a repository, in exchange for durability that recovery deliberately discards.
 
 **`arena_reports`** — `id PK, bot_id REFERENCES bots(id), created_at, candidate_name, opponent_name, games, wins, draws, losses, mean_move_ms, p95_move_ms, flags, illegal_attempts, seed, time_control_ms, increment_ms`
 
-Local arena results posted via `arena.py --report`. **Display-only table: no rating, matchmaking, leaderboard, seat, or game-finalisation code may ever read this table.** Retention: keep 20 most recent rows per `bot_id`, prune older rows in the same transaction as insert under `write_lock`.
+Local arena results posted via `arena.py --report`. **Display-only table: no rating, matchmaking, leaderboard, seat, or game-finalisation code may ever read this table.** This is enforced, not merely asserted: a test greps `chess_server/` for `arena_reports` and fails unless it appears only in `ArenaReportRepo` and the two route handlers (§8.1).
 
-### 5.1 What sets `rated`
+**Retention: keep the 20 rows with the highest `id` per `bot_id`, ordered by `id DESC`, never by `created_at`** — in the prune *and* in the read. Pruning runs in the same transaction as the insert, under `write_lock`. Verified against SQLite 3.51.3: with 25 rows sharing one `created_at`, `ORDER BY created_at DESC LIMIT 20` keeps ids 1–20 and **deletes the five newest**, and the matching read then returns the five oldest labelled "most recent". `created_at` is `TEXT` and an arena run posting several reports inside one second is the normal case, not an edge case.
+
+**Validation is semantic, not just structural** (§8.5 covers the two name fields). Rejected with `422` and actionable prose: `wins + draws + losses != games`; any negative value; `games > 10000`; `mean_move_ms` or `p95_move_ms` negative.
+
+**Nothing in the design depends on these numbers being honest**, and that is the point. No rating, matchmaking or leaderboard path reads the table, so fabricating a report buys only a lie in one's own My Bot panel. Stated here so that nobody later "improves" it into something that matters.
+
+### 5.2 Canonical constants
+
+One name per constant. `chess_core/clock.py` and `chess_core/elo.py` are the only declaration sites; everything else imports. Nanoseconds internally, milliseconds on the wire and in the database, converted **only** at the boundary by `ms_to_ns` / `ns_to_ms`.
+
+| Constant | Value | Declared in | Meaning |
+|---|---|---|---|
+| `RATED_TIME_CONTROL_NS` | 180_000_000_000 | `clock.py` | 3 minutes, rated |
+| `RATED_INCREMENT_NS` | 2_000_000_000 | `clock.py` | 2 seconds, rated |
+| `EXHIBITION_TIME_CONTROL_NS` | 300_000_000_000 | `clock.py` | 5 minutes, exhibition (§11) |
+| `EXHIBITION_INCREMENT_NS` | 10_000_000_000 | `clock.py` | 10 seconds, exhibition |
+| `DELIVERY_GRACE_NS` | 15_000_000_000 | `clock.py` | undelivered deadline, `controller='client'` (§6.3) |
+| `AGENT_DELIVERY_GRACE_NS` | 60_000_000_000 | `clock.py` | undelivered deadline, `controller='agent'` |
+| `AGENT_AUTO_RELEASE_NS` | 45_000_000_000 | `clock.py` | agent inactivity before auto-release (§13.3) |
+| `POLL_RECENCY_NS` | 5_000_000_000 | `clock.py` | pool eligibility window (§9.1) |
+| `CHALLENGE_TTL_NS` | 60_000_000_000 | `clock.py` | `open` challenge lifetime (§12) |
+| `POLL_HOLD_NS` | 20_000_000_000 | `clock.py` | server long-poll hold (§8.4) |
+| `TICK_INTERVAL_NS` | 1_000_000_000 | `clock.py` | ticker period (§4.6) |
+| `PLY_CAP` | 200 | `rules.py` | adjudication cap (§22) |
+| `STARTING_RATING` | 1200 | `elo.py` | §10.1 |
+| `K_FACTOR` | 24 | `elo.py` | §10.1, flat |
+| `ANCHOR_RATING_WINDOW` | 400 | `matchmaker.py` | §9.3 |
+
+There is no `TIME_CONTROL_MS` and no `RATED_TIME_CONTROL_MS`. Revision 4 used three names for one constant across three documents, and §5.1 rule 4 tested against a symbol that no interface declared.
+
+### 5.3 What sets `rated`
 
 Evaluated **first match wins**, top to bottom:
 
@@ -189,9 +241,15 @@ Evaluated **first match wins**, top to bottom:
 | 1 | Game ends `no_show`, `server_restart`, `admin_abort` | 0 |
 | 2 | Either participant has `role='benchmark'` | 0 |
 | 3 | Both bots share an `owner` | 0 |
-| 4 | `time_control_ms != TIME_CONTROL_MS` (exhibition) | 0 |
+| 4 | `time_control_ns != RATED_TIME_CONTROL_NS` (exhibition) | 0 |
 | 5 | Exactly one participant `is_anchor` | 1, **one-sided** (§10.3) |
 | 6 | Otherwise | 1 |
+
+**`rated` is written at game creation from rules 2–6. Only rule 1's terminations override it, to `0`, in the finalising transaction.**
+
+Rules 2–6 are all evaluable at creation: role, owner, anchor status and time control are known when the ticker inserts the row. Rule 1 is the only termination-time fact. Writing `rated=1` at creation "to be recomputed later" is wrong on the wire, not merely untidy: `rated` is carried live by `game_created`, `ActiveGameSummary` and `game_ended`, and §14 colour-codes from exactly that field. An exhibition game against an anchor would otherwise render green and badged **RATED** on the projector for its whole duration, then flip amber in the results ticker — which is precisely the confusion §14's colour rule exists to prevent.
+
+A game whose `rated` is `0` by rules 2–4 stays `0`; rule 1 can only ever move `rated` from `1` to `0`, never back.
 
 ---
 
@@ -301,15 +359,19 @@ Recovery marks every `pending`/`active` game `aborted`, `termination='server_res
 
 ```
 POST /bots                     register -> {bot_id, name, token}
-GET  /bots/me/turn             long-poll, holds up to 20s
+GET  /bots/me                  identity, rating, record, current game, controller
+GET  /bots/me/turn             long-poll, holds up to 20s; DELIVERS (§6.2)
+POST /bots/me/control          {action: "take" | "release"} -> {controller}
 POST /games/{id}/moves         {ply, move, client_reported_ms?}
 POST /games/{id}/resign        {ply}
+GET  /games/{id}/moves         move list with timings, for analyze_game
 POST /challenges               {opponent, time_control?}
 POST /challenges/{id}/accept   {}
 POST /challenges/{id}/decline  {}
 GET  /challenges               inbox for the authenticated bot
 GET  /leaderboard
 GET  /games/{id}
+GET  /bots/{bot_id}/rating_history
 GET  /state                    dashboard snapshot; returns current event id
 GET  /events                   SSE stream
 GET  /health
@@ -319,6 +381,8 @@ POST /arena-reports            {candidate_name, opponent_name, games, wins, draw
                                 increment_ms} -> {report_id}
 GET  /bots/{bot_id}/arena-reports  -> [{id, created_at, candidate_name, ...}]
 ```
+
+**Every route above is owned and implemented by `server-engineer`.** Revision 4 left `POST /bots/me/control`, `GET /bots/me`, `GET /games/{id}/moves` and `GET /bots/{bot_id}/rating_history` described only in the MCP and interfaces documents — so the surface §13.3 depends on was owned by the one track forbidden from writing routes. `mcp-engineer` owns the *tool* surface and consumes these; it never implements them.
 
 All authenticated endpoints use `Authorization: Bearer <token>` (§16.2).
 
@@ -528,6 +592,15 @@ To identify "my bot" in the dashboard (which is unauthenticated and read-only): 
 - Local arena reports (self-reported via `arena.py --report`) render **amber** with a visible "Local · self-reported" label
 
 Nobody should mistake a practice win for a ranked one, or unverified local data for server results.
+
+### Rendering untrusted strings
+
+Bot names, owners and arena-report labels are **attendee-controlled**, and the dashboard is the one place they are displayed to the whole room.
+
+- The server constrains `name`, `owner`, `candidate_name` and `opponent_name` to `^[A-Za-z0-9 _-]{1,32}$` at every write path, rejecting with `422` and actionable prose (§8.5).
+- The dashboard renders every such string with `textContent` or an explicit escape — **never** by interpolating into an HTML template literal, and never via `innerHTML`. The same rule applies to `?bot=`, which is attacker-supplied by definition.
+
+Two independent layers, because either alone fails: validation could be relaxed later by someone who does not know the dashboard depends on it, and an escape could be missed in one cell. A bot named `<img src=x onerror=...>` must be boring at both ends.
 
 ### Local arena reporting
 

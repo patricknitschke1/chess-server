@@ -1,5 +1,13 @@
 # MCP Engineer — Role Specification
 
+> **Revision 5 errata — binding, and they override anything below that disagrees.**
+> Applied from [the round-4 review](../../../../agent-reports/2026-08-24-spec-review-round4.md). Where this spec and design spec revision 5 conflict, **the design spec wins**.
+>
+> 1. **You own tools, not routes.** `POST /bots/me/control`, `GET /bots/me`, `GET /games/{id}/moves` and `GET /bots/{bot_id}/rating_history` are `server-engineer`'s to implement (design §8.1). You consume them. Revision 4 left them described only here — the one track forbidden from writing routes owned the surface §13.3 depends on.
+> 2. **`get_legal_moves()` is the sole delivery trigger for `controller='agent'`.** `get_game()` never delivers and never starts a clock, which is what makes its `readOnlyHint` honest. Say so in both tool descriptions.
+> 3. **`take_control()` is refused whenever the bot holds a `seats` row** — not "while a rated game is in progress", which is not evaluable at call time.
+> 4. Canonicalise the controller-mismatch error to one string that names `take_control()` explicitly.
+
 **Date:** 2026-08-24  
 **Owner:** `mcp-engineer`  
 **Track:** `chess_server/mcp/`  

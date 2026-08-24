@@ -1,5 +1,14 @@
 # Chess Domain Engineer — Role Specification
 
+> **Revision 5 errata — binding, and they override anything below that disagrees.**
+> Applied from [the round-4 review](../../../../agent-reports/2026-08-24-spec-review-round4.md). Where this spec and design spec revision 5 conflict, **the design spec wins**.
+>
+> 1. **The flag predicate is `remaining_ns <= 0`, not `< 0`.** Reaching exactly zero is a flag. §18's "flag on exact zero" test asserts this.
+> 2. **Matchmaker rule 2 must be written as explicit pseudocode**, stating that relaxing *one* side of a blocked pair is sufficient. Revision 4's prose was not implementable as written — this is what blocked phase 1.
+> 3. **`unpaired_ticks` is carried in `PoolEntry`** so the function reads no clock and stays pure and seeded-testable.
+> 4. Use the canonical constant names in design §5.2 (`RATED_TIME_CONTROL_NS`, `K_FACTOR`, `PLY_CAP`, …). `clock.py` and `elo.py` are the only declaration sites.
+> 5. Elo at K=24 is zero-sum under integer rounding — verified across 1,201 rating samples — so §18's property test is achievable as specified.
+
 **Owner:** chess-domain-engineer agent  
 **Date:** 2026-08-24  
 **Purpose:** Distilled specification for the pure-logic layer shared by the live server and the offline arena
