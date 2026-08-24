@@ -144,3 +144,90 @@ def test_select_opening_varies_with_seed():
     
     # Should get different openings (probabilistic but very likely)
     assert opening1 != opening2 or len(set([select_opening() for _ in range(100)])) == 1
+
+
+def test_arena_runs_single_game():
+    """Arena executes a single game between two bots."""
+    from arena import run_single_game
+    from chess_core import RATED_TIME_CONTROL_NS, RATED_INCREMENT_NS
+    
+    # Run game between two reference bots
+    result = run_single_game(
+        white_bot=ref_random_choose_move,
+        black_bot=ref_greedy_choose_move,
+        white_name="ref_random",
+        black_name="ref_greedy",
+        time_control_ns=RATED_TIME_CONTROL_NS,
+        increment_ns=RATED_INCREMENT_NS,
+        opening_fen=None,  # Start from standard position
+        verbose=False
+    )
+    
+    # Result should have required fields
+    assert result.white_name == "ref_random"
+    assert result.black_name == "ref_greedy"
+    assert result.result in ["white_win", "black_win", "draw"]
+    assert result.termination in ["checkmate", "stalemate", "flag", "illegal_forfeit", "adjudicated", "insufficient", "fifty_move", "threefold"]
+    assert len(result.moves_san) >= 0
+    assert result.white_time_ms >= 0
+    assert result.black_time_ms >= 0
+
+
+def test_arena_clock_matches_chess_core():
+    """Arena clock simulation matches chess_core behavior."""
+    from arena import run_single_game
+    from chess_core import RATED_TIME_CONTROL_NS, RATED_INCREMENT_NS, ns_to_ms
+    
+    # Run game and check time accounting is reasonable
+    result = run_single_game(
+        white_bot=ref_random_choose_move,
+        black_bot=ref_random_choose_move,
+        white_name="random1",
+        black_name="random2",
+        time_control_ns=RATED_TIME_CONTROL_NS,
+        increment_ns=RATED_INCREMENT_NS,
+        opening_fen=None,
+        verbose=False
+    )
+    
+    starting_ms = ns_to_ms(RATED_TIME_CONTROL_NS)
+    increment_ms = ns_to_ms(RATED_INCREMENT_NS)
+    
+    # With PLY_CAP=200, each side makes at most 100 moves, gaining 100*increment
+    # Maximum possible time: starting + 100*increment (if all moves are instant)
+    max_possible_ms = starting_ms + 100 * increment_ms
+    
+    # Time should be at most starting + all increments
+    assert result.white_time_ms <= max_possible_ms + 1000  # +1s tolerance for rounding
+    assert result.black_time_ms <= max_possible_ms + 1000
+
+
+def test_arena_detects_flags():
+    """Arena detects when a bot runs out of time."""
+    from arena import run_single_game
+    import time
+    
+    # Create a slow bot that will definitely flag
+    def slow_bot(board, clock):
+        time.sleep(2.0)  # Takes 2s per move - will flag quickly at any time control
+        return list(board.legal_moves)[0]
+    
+    # Create fast bot
+    def fast_bot(board, clock):
+        return list(board.legal_moves)[0]
+    
+    # Very short time control: 5s total, 0s increment
+    result = run_single_game(
+        white_bot=slow_bot,
+        black_bot=fast_bot,
+        white_name="SlowBot",
+        black_name="FastBot",
+        time_control_ns=5_000_000_000,  # 5 seconds
+        increment_ns=0,
+        opening_fen=None,
+        verbose=False
+    )
+    
+    # SlowBot should flag
+    assert result.termination == "flag"
+    assert result.result == "black_win"  # FastBot (black) wins
