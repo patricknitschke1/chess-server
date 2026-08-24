@@ -123,6 +123,11 @@ def _history_fens(game: GameRow, fen_after: str) -> list[str]:
     return state.history.get(game.id, [STARTING_FEN]) + [fen_after]
 
 
+def _record_ply(game_id: int, fen_after: str, san: str) -> None:
+    state.history.setdefault(game_id, [STARTING_FEN]).append(fen_after)
+    state.history_san.setdefault(game_id, []).append(san)
+
+
 
 async def apply_move_locked(
     deps: EngineDeps,
@@ -192,7 +197,9 @@ async def apply_move_locked(
     )
     mover_id = _mover_id(game)
     txn.defer(lambda: state.mailbox.pop(mover_id, None))
-    txn.defer(lambda: state.history.setdefault(game.id, [STARTING_FEN]).append(fen_after))
+    # One defer for both caches: the SAN is already computed here, and splitting
+    # them lets a rollback leave one of the two a ply ahead of the database.
+    txn.defer(lambda: _record_ply(game.id, fen_after, move_result.san))
 
     game_after = await games.get_by_id(game.id)
     txn.emit("move_played", {

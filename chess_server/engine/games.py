@@ -71,6 +71,7 @@ async def create_game_locked(
 
     game = await games.get_by_id(game_id)
     txn.defer(lambda: state.history.setdefault(game_id, [STARTING_FEN]))
+    txn.defer(lambda: state.history_san.setdefault(game_id, []))
     txn.emit("game_created", {
         "game_id": game_id,
         "white_bot_id": white.id,
@@ -146,6 +147,7 @@ async def _end_game_locked(
     txn.defer(lambda: state.mailbox.pop(white.id, None))
     txn.defer(lambda: state.mailbox.pop(black.id, None))
     txn.defer(lambda: state.history.pop(game.id, None))
+    txn.defer(lambda: state.history_san.pop(game.id, None))
     txn.defer(lambda: state.unpaired_ticks.pop(white.id, None))
     txn.defer(lambda: state.unpaired_ticks.pop(black.id, None))
     txn.defer(lambda: deps.wake(white.id))

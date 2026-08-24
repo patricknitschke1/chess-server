@@ -35,7 +35,8 @@ def _fresh_seq():
 @pytest.fixture(autouse=True)
 def _fresh_engine_state():
     """Emptied field by field rather than through clear_all, which is under test."""
-    for container in (state.mailbox, state.history, state.unpaired_ticks, state.connected):
+    for container in (state.mailbox, state.history, state.history_san,
+                      state.unpaired_ticks, state.connected):
         container.clear()
 
 
