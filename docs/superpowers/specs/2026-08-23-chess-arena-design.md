@@ -635,8 +635,11 @@ The arena runs the same clock code as the server, so a bot that flags locally fl
 | `dashboard-engineer` | HTML/CSS/JS, SSE, board rendering, visual design | `web/` |
 | `workshop-author` | Pedagogy, Claude customization formats, writing for novices | `AGENTS.md`, skills, starter-kit docs |
 | `spec-reviewer` | Diffs vs spec; security, simplicity, YAGNI | Read-only, everything; owns nothing |
+| `design-adversary` | Attacking designs pre-build: races, silent failures, exploits | Read-only, documents; owns nothing |
 
-Each build agent maps 1:1 onto a parallel track, and each track has exactly one owner. `spec-reviewer` is deliberately not a track — it reviews the other six, which requires that it wrote none of them.
+Each build agent maps 1:1 onto a parallel track, and each track has exactly one owner. `spec-reviewer` and `design-adversary` are deliberately not tracks — they review the other six, which requires that they wrote none of them.
+
+The two reviewers are distinct and must stay so. `design-adversary` reviews *documents* and may demand the spec change; `spec-reviewer` reviews *diffs* and treats the spec as authoritative. Collapsing them produces either a code reviewer who relitigates settled design on every change, or a design reviewer who assumes the spec is correct and therefore finds nothing.
 
 `mcp-engineer` and `server-engineer` are not redundant: one designs for HTTP clients, the other for a language model. `chess-domain-engineer` is isolated because it is the only place where being wrong is *silent*. `client-engineer` exists because the SDK, `bot.py` and `arena.py` are the only code twenty attendees actually read and modify — designing an API a novice cannot misuse is a distinct skill from server internals, and splitting that surface across three owners is the tangle the roster exists to prevent.
 
