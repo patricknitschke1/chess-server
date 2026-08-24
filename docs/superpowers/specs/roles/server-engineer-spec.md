@@ -84,13 +84,20 @@ Every constant below is imported from `chess_core`. **No numeric literal for any
 
 The ticker sleeps `TICK_INTERVAL_NS / 1e9`. The poll holds `POLL_HOLD_NS / 1e9`. There is no `TIME_CONTROL_MS` and no `RATED_INCREMENT_MS`; the latter name does not exist, and passing a `*_NS` value into a `*_ms` parameter puts 5.7 years on each clock — at which point nothing ever flags, and the failure is invisible because the column is populated, non-null and decreasing.
 
-**Three constants are server-local**, declared once in `chess_server/`, because they drive presentation and nothing in `chess_core` may depend on them:
+**These constants are server-local**, declared once in `chess_server/`, because they drive presentation or supervision and nothing in `chess_core` may depend on them:
 
 | Constant | Value | Declared in | Purpose |
 |---|---|---|---|
 | `MOVE_COALESCE_NS` | 500_000_000 | `api/sse.py` | non-featured `move_played` throttle (design §14) |
 | `DISCONNECT_AFTER_NS` | 30_000_000_000 | `engine/ticker.py` | the `bot_disconnected` edge (interfaces Part 2) |
 | `REGISTER_PER_IP_PER_MIN` | 10 | `api/rate_limit.py` | `POST /bots` IP limit (design §8.5 gives the rule, not the number) |
+| `TICK_WARN_NS` | 5_000_000_000 | `engine/supervisor.py` | warn threshold (design §4.6) |
+| `TICK_RESTART_NS` | 15_000_000_000 | `engine/supervisor.py` | cancel-and-restart threshold (design §4.6) |
+| `SUPERVISOR_PERIOD_SECONDS` | 2 | `engine/supervisor.py` | how often the supervisor decides |
+| `CANCEL_WAIT_SECONDS` | 5 | `engine/supervisor.py` | how long to wait for a cancel to take before refusing to respawn |
+| `PROBE_TIMEOUT_SECONDS` | 1 | `engine/supervisor.py` | `db_writable` write-probe timeout |
+
+`TICK_WARN_NS` and `TICK_RESTART_NS` happen to equal `POLL_RECENCY_NS` and `DELIVERY_GRACE_NS`. That is a coincidence of round numbers, not a relationship — importing either would assert a dependency that does not exist, and would silently couple supervision to a game rule. They are declared separately and the no-literals guard has an allow-list entry saying so.
 
 If any of these ever affects a game outcome it has been misplaced, and it belongs in design §5.2 instead.
 
