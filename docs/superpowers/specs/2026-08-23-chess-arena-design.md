@@ -364,6 +364,8 @@ Recovery marks every `pending`/`active` game `aborted`, `termination='server_res
 
 This is why `_mono` values may only be compared with other `_mono` values taken in the same process, and why nothing may persist a monotonic deadline across a restart. Wall-clock timestamps are fine to persist; monotonic ones are not.
 
+**Recovery also expires every non-terminal challenge**, `reason='server_restart'`. A challenge is an intent to create a game and its TTL is measured from a monotonic timestamp taken in a process that no longer exists, so it can neither be honoured nor timed out correctly. Leaving them queued means the first tick after a restart creates games nobody is waiting for.
+
 Bots re-poll, get "no game", and are re-paired within a tick.
 
 ~20 seconds of lost play, zero rating damage, and restarting becomes a **safe operator action** — which matters, because you will restart during the workshop.
@@ -464,7 +466,9 @@ Behind a proxy: `proxy_buffering off`, `proxy_read_timeout ≥ 60s`. Cloudflare'
 
 ### 9.1 Pool eligibility
 
-All must hold: `role='competitor'`; no `seats` row; `controller='client'`; matchmaking not globally paused; and a poll currently held **or** `last_poll_mono` within 5s.
+All must hold: `role IN ('competitor','anchor')`; no `seats` row; `controller='client'`; matchmaking not globally paused; and a poll currently held **or** `last_poll_mono` within 5s.
+
+**The poll-recency clause applies to competitors only.** An anchor runs in-process and never polls, so requiring recency would make every anchor permanently ineligible, the anchor offer would never find a partner, and §9.3 would be unreachable code — silently, with the pool simply looking empty. Recency exists to prove a bot is actually running; for an anchor that is guaranteed by the server being up.
 
 ### 9.2 Pairing policy — pure function
 

@@ -655,8 +655,7 @@ EVENT_BOT_CONNECTED = "bot_connected"
 EVENT_BOT_DISCONNECTED = "bot_disconnected"
 EVENT_CHALLENGE_UPDATED = "challenge_updated"
 EVENT_HEALTH_TICK = "health_tick"
-EVENT_ARENA_REPORT_POSTED = "arena_report_posted"
-EVENT_ARENA_REPORT_POSTED = "arena_report_posted"
+EVENT_ARENA_REPORT_POSTED = "arena_report_posted"  # DEFERRED - no producer in this build
 ```
 
 ### Event Payloads
@@ -850,31 +849,8 @@ When `status` is `consumed`, `game_id` is populated. When `status` is
 "seat_unavailable", "timeout").
 
 #### `arena_report_posted`
-Fired when a local arena report is posted via `arena.py --report`.
-```json
-{
-  "run": "abc123",
-  "seq": 11,
-  "event_type": "arena_report_posted",
-  "data": {
-    "bot_id": 1,
-    "bot_name": "AlphaBot",
-    "candidate_name": "AlphaBot v2",
-    "opponent_name": "baseline",
-    "games": 100,
-    "wins": 67,
-    "draws": 15,
-    "losses": 18,
-    "win_rate": 0.67,
-    "mean_move_ms": 45,
-    "p95_move_ms": 120,
-    "flags": 2
-  }
-}
-```
-No tokens. `win_rate` is computed as `wins / games` at emit time.
+**DEFERRED — no producer in this build** (design §21). Its producer, `arena.py --report`, is deferred with the arena surface, so nothing emits this today. The payload stays recorded so the shape survives the deferral.
 
-#### `arena_report_posted`
 Fired when a local arena report is posted via `arena.py --report`.
 ```json
 {
