@@ -340,6 +340,14 @@ def deliver_position(
     """
     ...
 
+def elapsed_ms(earlier_mono: int, now_mono: int) -> int:
+    """Milliseconds between two monotonic readings, for display and health.
+    
+    `is_within` answers a decision and `window_start_mono` gives a SQL bound;
+    neither yields a number to show (e.g. `last_tick_age_ms`).
+    """
+    ...
+
 def window_start_mono(now_mono: int, window_ns: int) -> int:
     """The oldest monotonic timestamp still inside `window_ns`.
     

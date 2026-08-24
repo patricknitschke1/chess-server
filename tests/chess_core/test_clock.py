@@ -499,3 +499,14 @@ def test_window_start_mono_agrees_with_is_within():
 
     for value in (cutoff - 1, cutoff, cutoff + 1, now):
         assert (value >= cutoff) is clock.is_within(value, now, window)
+
+
+def test_elapsed_ms_floors_like_every_other_boundary_conversion():
+    """One rounding direction across the whole ns->ms boundary, or clocks drift."""
+    start = 1_000_000_000
+
+    assert clock.elapsed_ms(start, start) == 0
+    assert clock.elapsed_ms(start, start + 999_999) == 0
+    assert clock.elapsed_ms(start, start + 1_000_000) == 1
+    assert clock.elapsed_ms(start, start + 1_999_999) == 1
+    assert clock.elapsed_ms(start, start + 15_000_000_000) == 15_000

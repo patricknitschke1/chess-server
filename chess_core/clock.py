@@ -83,6 +83,16 @@ def deliver_position(
     )
 
 
+def elapsed_ms(earlier_mono: int, now_mono: int) -> int:
+    """Milliseconds between two monotonic readings, for display and health.
+
+    `is_within` answers a decision and `window_start_mono` gives a SQL bound;
+    neither yields a number to show. Without this, `last_tick_age_ms` would be
+    a monotonic subtraction in `chess_server`, which role spec §1.2 forbids.
+    """
+    return ns_to_ms(now_mono - earlier_mono)
+
+
 def window_start_mono(now_mono: int, window_ns: int) -> int:
     """The oldest monotonic timestamp still inside `window_ns`.
 
