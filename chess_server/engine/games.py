@@ -1,12 +1,13 @@
 """Game creation and the terminal transitions (role spec §6.5, §7.2)."""
 from typing import Optional
 
-from chess_core import STARTING_FEN, Color, GameResult, TerminationReason, ns_to_ms
+from chess_core import STARTING_FEN, Color, GameResult, RatingUpdate, TerminationReason, ns_to_ms
 
 from chess_server.engine import state
 from chess_server.engine.deps import EngineDeps
+from chess_server.engine.rating import derive_rating_updates
 from chess_server.engine.wall import utc_now_iso
-from chess_server.store.repositories import BotRepo, GameRepo, SeatRepo
+from chess_server.store.repositories import BotRepo, GameRepo, RatingHistoryRepo, SeatRepo
 from chess_server.store.rows import BotRow, GameRow
 from chess_server.store.txn import Txn
 
@@ -87,9 +88,17 @@ async def create_game_locked(
 
 async def rate_game_locked(
     txn: Txn, game: GameRow, white: BotRow, black: BotRow, result: GameResult
-) -> list[tuple[BotRow, object]]:
-    """Placeholder until the rating derivation lands. Returns the rows persisted."""
-    return []
+) -> list[tuple[BotRow, RatingUpdate]]:
+    """Insert the history rows. UNIQUE (game_id, bot_id) makes a second call a
+    constraint violation rather than a number nobody can reconcile later."""
+    updates = derive_rating_updates(white, black, result)
+    history = RatingHistoryRepo(txn.conn, txn.executor)
+    ts = utc_now_iso()
+    for bot, update in updates:
+        await history.insert_rating_change(
+            bot.id, game.id, update.rating_before, update.rating_after, update.delta, ts
+        )
+    return updates
 
 
 async def _end_game_locked(
