@@ -91,7 +91,7 @@ async def step_delivery_grace(deps: EngineDeps, txn: Txn, now_mono: int) -> None
 
 async def step_flag(deps: EngineDeps, txn: Txn, now_mono: int) -> None:
     """Role spec §7.5. `has_flagged` is the single declaration of design §6.4's
-    `<= 0`; chess_server computes no remaining time of its own."""
+    flag-fall predicate; chess_server never derives time left of its own."""
     games = GameRepo(txn.conn, txn.executor)
     for game in await games.list_delivered_active():
         async with _unit(txn, f"flag_{game.id}"):
