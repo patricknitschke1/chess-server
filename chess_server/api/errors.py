@@ -29,6 +29,21 @@ ILLEGAL_MOVE = (
 
 ADMIN_REQUIRED = "Admin token required."
 
+INVALID_JOIN_CODE = "Invalid join code. Ask the workshop host for the current one."
+INVALID_ROLE = "Invalid role '{role}'. Register with role 'competitor' or 'benchmark'."
+NAME_TAKEN = "Name '{name}' is already taken. Pick another and register again."
+SECOND_COMPETITOR = (
+    "You already have a competitor bot registered ({existing_name}). Register"
+    " additional bots with role='benchmark' — they can spar with your competitor"
+    " without affecting ratings."
+)
+STRING_SHAPE = (
+    "Invalid {field} '{value}'. Use 1-32 characters: letters, digits, spaces,"
+    " underscores or hyphens."
+)
+RESERVED_NAME = "The name '{name}' belongs to a reference bot. Pick another one."
+RESERVED_OWNER = "The owner '{owner}' is reserved for the server. Use your own name."
+
 
 class ApiError(Exception):
     """Carries the interfaces Part 5 `ErrorResponse` shape, which is `{error, details}`
