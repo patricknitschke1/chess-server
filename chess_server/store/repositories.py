@@ -4,9 +4,26 @@ import sqlite3
 from concurrent.futures import Executor
 from typing import Optional, Sequence
 
-from chess_core import ClockState, Color, ms_to_ns, ns_to_ms
+from chess_core import (
+    RATED_TIME_CONTROL_NS,
+    STARTING_FEN,
+    ClockState,
+    Color,
+    create_clock,
+    ms_to_ns,
+    ns_to_ms,
+)
 
 from chess_server.store.rows import BotRow, GameRow, from_row
+
+NON_TERMINAL = ("pending", "active")
+
+_FEN_SIDE = {"w": Color.WHITE.value, "b": Color.BLACK.value}
+
+
+def to_move_from_fen(fen: str) -> str:
+    """§3.2: the FEN's second field is authoritative. Never ply parity."""
+    return _FEN_SIDE[fen.split()[1]]
 
 
 def _clock_from_game(game: GameRow) -> ClockState:
@@ -162,3 +179,115 @@ class BotRepo(_Repo):
             (cutoff_mono,),
         )
         return [from_row(BotRow, row) for row in rows]
+
+
+def rated_at_creation(white: BotRow, black: BotRow, time_control_ns: int) -> int:
+    """Design §5.3 rules 2-6, first match wins. Rule 1 belongs to finalisation."""
+    if "benchmark" in (white.role, black.role):
+        return 0
+    if white.owner == black.owner:
+        return 0
+    if time_control_ns != RATED_TIME_CONTROL_NS:
+        return 0
+    return 1
+
+
+_SUMMARY_SELECT = """
+SELECT g.id AS game_id, g.white_bot_id, g.black_bot_id, g.status, g.fen, g.to_move,
+       g.ply, g.white_ms, g.black_ms, g.rated, g.turn_started_mono,
+       g.to_move_since_mono, g.delivered_to_mover,
+       w.name AS white_bot_name, w.rating AS white_rating,
+       b.name AS black_bot_name, b.rating AS black_rating
+  FROM games g
+  JOIN bots w ON w.id = g.white_bot_id
+  JOIN bots b ON b.id = g.black_bot_id
+"""
+
+_MOVER_JOIN = (
+    " JOIN bots m ON m.id = CASE g.to_move WHEN 'white' THEN g.white_bot_id"
+    "                                      ELSE g.black_bot_id END"
+)
+
+
+class GameRepo(_Repo):
+    async def insert_game(
+        self,
+        white: BotRow,
+        black: BotRow,
+        time_control_ns: int,
+        increment_ns: int,
+        source: str,
+        now_mono: int,
+        created_at: str,
+        fen: str = STARTING_FEN,
+    ) -> int:
+        clock = create_clock(time_control_ns, increment_ns, Color(to_move_from_fen(fen)), now_mono)
+        fields = _clock_to_game_fields(clock)
+        cursor = await self._write(
+            "INSERT INTO games (white_bot_id, black_bot_id, status, fen, ply, to_move,"
+            " white_ms, black_ms, time_control_ms, increment_ms, to_move_since_mono,"
+            " turn_started_mono, delivered_to_mover, rated, source, white_strikes,"
+            " black_strikes, created_at)"
+            " VALUES (?, ?, 'pending', ?, 0, ?, ?, ?, ?, ?, ?, NULL, 0, ?, ?, 0, 0, ?)",
+            (
+                white.id,
+                black.id,
+                fen,
+                fields["to_move"],
+                fields["white_ms"],
+                fields["black_ms"],
+                ns_to_ms(time_control_ns),
+                ns_to_ms(increment_ns),
+                fields["to_move_since_mono"],
+                rated_at_creation(white, black, time_control_ns),
+                source,
+                created_at,
+            ),
+        )
+        return cursor.lastrowid
+
+    async def get_by_id(self, game_id: int) -> Optional[GameRow]:
+        return from_row(GameRow, await self._one("SELECT * FROM games WHERE id = ?", (game_id,)))
+
+    async def get_for_bot(self, bot_id: int) -> Optional[GameRow]:
+        """§7.1: a game is reachable only through seats, never by scanning games."""
+        return from_row(
+            GameRow,
+            await self._one(
+                "SELECT g.* FROM games g JOIN seats s ON s.game_id = g.id WHERE s.bot_id = ?",
+                (bot_id,),
+            ),
+        )
+
+    async def list_undelivered_non_terminal(self) -> list[GameRow]:
+        rows = await self._all(
+            "SELECT * FROM games WHERE delivered_to_mover = 0"
+            " AND status IN (?, ?) ORDER BY id",
+            NON_TERMINAL,
+        )
+        return [from_row(GameRow, row) for row in rows]
+
+    async def list_delivered_active(self) -> list[GameRow]:
+        rows = await self._all(
+            "SELECT * FROM games WHERE delivered_to_mover = 1 AND status = 'active' ORDER BY id"
+        )
+        return [from_row(GameRow, row) for row in rows]
+
+    async def list_anchor_to_move(self) -> list[GameRow]:
+        rows = await self._all(
+            "SELECT g.* FROM games g" + _MOVER_JOIN
+            + " WHERE g.status IN (?, ?) AND m.is_anchor = 1 ORDER BY g.id",
+            NON_TERMINAL,
+        )
+        return [from_row(GameRow, row) for row in rows]
+
+    async def list_active_summaries(self) -> list[dict]:
+        rows = await self._all(
+            _SUMMARY_SELECT + " WHERE g.status IN (?, ?) ORDER BY g.id", NON_TERMINAL
+        )
+        return [dict(row) for row in rows]
+
+
+class SeatRepo(_Repo):
+    async def insert_seat(self, bot_id: int, game_id: int) -> None:
+        await self._write("INSERT INTO seats (bot_id, game_id) VALUES (?, ?)", (bot_id, game_id))
