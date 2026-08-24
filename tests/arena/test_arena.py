@@ -231,3 +231,42 @@ def test_arena_detects_flags():
     # SlowBot should flag
     assert result.termination == "flag"
     assert result.result == "black_win"  # FastBot (black) wins
+
+
+def test_arena_computes_statistics():
+    """Arena computes mean and p95 move times correctly."""
+    from arena import compute_statistics
+    
+    move_times = [100, 150, 120, 200, 180, 90, 110, 300, 140, 160]
+    
+    stats = compute_statistics(move_times)
+    
+    assert stats['mean'] == 155.0  # sum / count
+    assert stats['p95'] == 300  # 95th percentile (9th value in sorted list)
+    assert stats['min'] == 90
+    assert stats['max'] == 300
+
+
+def test_arena_tracks_elo():
+    """Arena maintains local ELO ratings."""
+    from arena import ArenaTracker
+    from chess_core import STARTING_RATING
+    
+    tracker = ArenaTracker()
+    tracker.register_bot("Bot1")
+    tracker.register_bot("Bot2")
+    
+    # Both start at 1200
+    assert tracker.get_rating("Bot1") == STARTING_RATING
+    assert tracker.get_rating("Bot2") == STARTING_RATING
+    
+    # Record Bot1 win
+    tracker.record_game("Bot1", "Bot2", "white_win")
+    
+    # Bot1 should gain rating, Bot2 should lose
+    bot1_rating = tracker.get_rating("Bot1")
+    bot2_rating = tracker.get_rating("Bot2")
+    
+    assert bot1_rating > STARTING_RATING
+    assert bot2_rating < STARTING_RATING
+    assert bot1_rating + bot2_rating == 2 * STARTING_RATING  # Zero-sum

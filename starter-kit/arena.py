@@ -4,8 +4,9 @@ Runs round-robin tournaments between bots using chess_core for all game logic.
 Provides diagnostics (time per move, flags, illegal moves) critical for debugging.
 """
 import time
+import statistics
 import chess
-from typing import Callable, Optional, List
+from typing import Callable, Optional, List, Dict
 from dataclasses import dataclass
 from chess_client import ClockView
 
@@ -21,6 +22,9 @@ from chess_core import (
     ms_to_ns,
     ns_to_ms,
     Color,
+    STARTING_RATING,
+    compute_rating_exchange,
+    compute_draw_exchange,
 )
 
 
@@ -293,3 +297,101 @@ def run_single_game(
         black_illegal_attempts=black_illegal_attempts,
         ply_count=ply
     )
+
+
+def compute_statistics(values: List[int]) -> Dict[str, float]:
+    """Compute mean, p95, min, max from a list of values."""
+    if not values:
+        return {'mean': 0.0, 'p95': 0, 'min': 0, 'max': 0}
+    
+    sorted_values = sorted(values)
+    p95_index = int(len(sorted_values) * 0.95)
+    
+    return {
+        'mean': statistics.mean(values),
+        'p95': sorted_values[p95_index] if p95_index < len(sorted_values) else sorted_values[-1],
+        'min': min(values),
+        'max': max(values)
+    }
+
+
+class ArenaTracker:
+    """Tracks ratings and statistics for local arena."""
+    
+    def __init__(self):
+        self.ratings: Dict[str, int] = {}
+        self.wins: Dict[str, int] = {}
+        self.losses: Dict[str, int] = {}
+        self.draws: Dict[str, int] = {}
+        self.games_played: Dict[str, int] = {}
+        self.move_times: Dict[str, List[int]] = {}
+        self.flags: Dict[str, int] = {}
+        self.illegal_attempts: Dict[str, int] = {}
+    
+    def register_bot(self, name: str):
+        """Register a bot with starting rating."""
+        if name not in self.ratings:
+            self.ratings[name] = STARTING_RATING
+            self.wins[name] = 0
+            self.losses[name] = 0
+            self.draws[name] = 0
+            self.games_played[name] = 0
+            self.move_times[name] = []
+            self.flags[name] = 0
+            self.illegal_attempts[name] = 0
+    
+    def get_rating(self, name: str) -> int:
+        """Get current rating for a bot."""
+        return self.ratings.get(name, STARTING_RATING)
+    
+    def record_game(self, white_name: str, black_name: str, result: str):
+        """Record game result and update ratings."""
+        white_rating = self.ratings[white_name]
+        black_rating = self.ratings[black_name]
+        
+        if result == "draw":
+            white_update, black_update = compute_draw_exchange(white_rating, black_rating)
+            self.draws[white_name] += 1
+            self.draws[black_name] += 1
+        elif result == "white_win":
+            white_update, black_update = compute_rating_exchange(white_rating, black_rating)
+            self.wins[white_name] += 1
+            self.losses[black_name] += 1
+        else:  # black_win
+            black_update, white_update = compute_rating_exchange(black_rating, white_rating)
+            self.wins[black_name] += 1
+            self.losses[white_name] += 1
+        
+        self.ratings[white_name] = white_update.rating_after
+        self.ratings[black_name] = black_update.rating_after
+        self.games_played[white_name] += 1
+        self.games_played[black_name] += 1
+    
+    def record_move_times(self, bot_name: str, times: List[int]):
+        """Record move times for a bot."""
+        self.move_times[bot_name].extend(times)
+    
+    def record_flags(self, bot_name: str, count: int):
+        """Record flag events."""
+        self.flags[bot_name] += count
+    
+    def record_illegal_attempts(self, bot_name: str, count: int):
+        """Record illegal move attempts."""
+        self.illegal_attempts[bot_name] += count
+    
+    def get_stats(self, name: str) -> Dict:
+        """Get full statistics for a bot."""
+        move_stats = compute_statistics(self.move_times.get(name, []))
+        
+        return {
+            'name': name,
+            'rating': self.ratings.get(name, STARTING_RATING),
+            'wins': self.wins.get(name, 0),
+            'losses': self.losses.get(name, 0),
+            'draws': self.draws.get(name, 0),
+            'games_played': self.games_played.get(name, 0),
+            'mean_move_ms': move_stats['mean'],
+            'p95_move_ms': move_stats['p95'],
+            'flags': self.flags.get(name, 0),
+            'illegal_attempts': self.illegal_attempts.get(name, 0)
+        }
