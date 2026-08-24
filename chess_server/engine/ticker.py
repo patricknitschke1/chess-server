@@ -7,10 +7,20 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from typing import AsyncIterator, Awaitable, Callable, Optional, Sequence
 
-from chess_core import TICK_INTERVAL_NS, elapsed_ms
+from chess_core import (
+    AGENT_DELIVERY_GRACE_NS,
+    DELIVERY_GRACE_NS,
+    TICK_INTERVAL_NS,
+    TerminationReason,
+    check_delivery_timeout,
+    elapsed_ms,
+)
 
 from chess_server.engine.deps import EngineDeps
+from chess_server.engine.games import abort_game_locked, finalise_game_locked, opposite_win
+from chess_server.engine.runner import _mover_id
 from chess_server.store.cas import CASConflict
+from chess_server.store.repositories import BotRepo, GameRepo, _clock_from_game
 from chess_server.store.txn import Txn, critical_section
 
 logger = logging.getLogger(__name__)
@@ -52,6 +62,31 @@ async def _unit(txn: Txn, name: str) -> AsyncIterator[None]:
 
 
 STEPS: list[Step] = []
+
+
+async def step_delivery_grace(deps: EngineDeps, txn: Txn, now_mono: int) -> None:
+    """Role spec §7.4. `list_undelivered_non_terminal` carries the status filter;
+    broadening it re-admits every finished game forever, silently, because the
+    finalisation CAS then returns rowcount 0 rather than an error."""
+    games = GameRepo(txn.conn, txn.executor)
+    bots = BotRepo(txn.conn, txn.executor)
+    for game in await games.list_undelivered_non_terminal():
+        async with _unit(txn, f"grace_{game.id}"):
+            mover = await bots.get_by_id(_mover_id(game))
+            # The grace belongs to the bot to move; `games` has no controller column.
+            grace_ns = (
+                AGENT_DELIVERY_GRACE_NS if mover.controller == "agent" else DELIVERY_GRACE_NS
+            )
+            if not check_delivery_timeout(_clock_from_game(game), now_mono, grace_ns):
+                continue
+            if game.ply == 0:
+                await abort_game_locked(deps, txn, game, TerminationReason.NO_SHOW)
+            else:
+                # The server never writes `crash` (design §22).
+                await finalise_game_locked(
+                    deps, txn, game, opposite_win(game.to_move), TerminationReason.ABANDONED
+                )
+
 
 
 async def _tick_once(

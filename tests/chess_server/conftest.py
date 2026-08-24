@@ -2,12 +2,13 @@ import asyncio
 
 import pytest
 
-from chess_core import STARTING_RATING
+from chess_core import RATED_INCREMENT_NS, RATED_TIME_CONTROL_NS, STARTING_RATING
 from chess_server.engine import state
 from chess_server.engine.deps import EngineDeps
+from chess_server.engine.games import create_game_locked
 from chess_server.store import txn
 from chess_server.store.db import open_store
-from chess_server.store.repositories import BotRepo
+from chess_server.store.repositories import BotRepo, GameRepo
 from chess_server.store.txn import critical_section, reset_seq
 
 WALL = "2026-08-24T00:00:00Z"
@@ -109,6 +110,35 @@ def deps(store, clock, sink, wake):
         wake=wake,
         now_mono=clock,
     )
+
+
+@pytest.fixture
+def games(store):
+    return GameRepo(store.writer, store.executor)
+
+
+@pytest.fixture
+def bot_repo(store):
+    return BotRepo(store.writer, store.executor)
+
+
+@pytest.fixture
+def make_game(store, deps, games):
+    """A seated game through the real creation path, committed."""
+
+    async def _make(white, black, *, time_control_ns=RATED_TIME_CONTROL_NS,
+                    increment_ns=RATED_INCREMENT_NS, source="matchmaker"):
+        async with critical_section(store.writer, store.executor, deps.sink) as txn:
+            game_id = await create_game_locked(
+                deps, txn, white, black,
+                time_control_ns=time_control_ns,
+                increment_ns=increment_ns,
+                source=source,
+                now_mono=deps.now_mono(),
+            )
+        return await games.get_by_id(game_id)
+
+    return _make
 
 
 @pytest.fixture
