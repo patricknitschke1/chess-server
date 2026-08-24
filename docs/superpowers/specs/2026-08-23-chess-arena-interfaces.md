@@ -263,7 +263,8 @@ def san_list_to_pgn(
     black_name: str,
     result: GameResult,
     white_rating: Optional[int] = None,
-    black_rating: Optional[int] = None
+    black_rating: Optional[int] = None,
+    starting_fen: Optional[str] = None
 ) -> str:
     """Format a game as PGN for arena.py export.
     
@@ -274,6 +275,10 @@ def san_list_to_pgn(
         result: Game result
         white_rating: Optional ELO rating for White
         black_rating: Optional ELO rating for Black
+        starting_fen: Position the game began from; omit for the standard start.
+            When it is not the standard start, `[SetUp "1"]` and `[FEN ...]`
+            headers are written and movetext is numbered from that position.
+            Without them a game played from an opening cannot be read back.
     
     Returns:
         Complete PGN string with headers and movetext

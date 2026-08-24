@@ -262,7 +262,8 @@ def san_list_to_pgn(
     black_name: str,
     result: GameResult,
     white_rating: Optional[int] = None,
-    black_rating: Optional[int] = None
+    black_rating: Optional[int] = None,
+    starting_fen: Optional[str] = None
 ) -> str:
     """Format a game as PGN for arena.py export.
     
@@ -273,6 +274,8 @@ def san_list_to_pgn(
         result: Game result
         white_rating: Optional ELO rating for White
         black_rating: Optional ELO rating for Black
+        starting_fen: Position the game began from. Omit for the standard start.
+            A game from an opening position is unreadable without this.
     
     Returns:
         Complete PGN string with headers and movetext
@@ -285,6 +288,8 @@ def san_list_to_pgn(
     }
     result_str = result_map[result]
     
+    start = chess.Board(starting_fen) if starting_fen else chess.Board()
+    
     # Build headers
     headers = [
         f'[White "{white_name}"]',
@@ -292,19 +297,27 @@ def san_list_to_pgn(
         f'[Result "{result_str}"]'
     ]
     
+    if starting_fen is not None and starting_fen != STARTING_FEN:
+        headers.append('[SetUp "1"]')
+        headers.append(f'[FEN "{starting_fen}"]')
+    
     if white_rating is not None:
         headers.append(f'[WhiteElo "{white_rating}"]')
     if black_rating is not None:
         headers.append(f'[BlackElo "{black_rating}"]')
     
-    # Build movetext
+    # Build movetext, numbering from wherever the game actually began
     movetext_parts = []
+    move_num = start.fullmove_number
+    white_to_move = start.turn == chess.WHITE
     for i, move in enumerate(san_moves):
-        if i % 2 == 0:  # White's move
-            move_num = (i // 2) + 1
+        if white_to_move:
             movetext_parts.append(f"{move_num}. {move}")
-        else:  # Black's move
-            movetext_parts.append(move)
+        else:
+            # A game resuming mid-move needs the ellipsis to place Black's reply.
+            movetext_parts.append(f"{move_num}... {move}" if i == 0 else move)
+            move_num += 1
+        white_to_move = not white_to_move
     
     movetext = " ".join(movetext_parts)
     if movetext:

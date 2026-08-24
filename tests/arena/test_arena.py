@@ -415,8 +415,7 @@ def test_arena_schedule_spreads_remainder_evenly():
     assert max(counts) - min(counts) <= 1
 
 
-# Scholar's mate, legal from the standard starting position so it survives a PGN
-# round trip (san_list_to_pgn writes no [FEN] header).
+# Scholar's mate, from the standard starting position.
 SCHOLARS_MATE_SAN = ["e4", "e5", "Bc4", "Nc6", "Qh5", "Nf6", "Qxf7#"]
 SCHOLARS_MATE_UCI = ["e2e4", "e7e5", "f1c4", "b8c6", "d1h5", "g8f6", "h5f7"]
 
@@ -605,3 +604,35 @@ def test_arena_seeded_run_reproduces_moves_and_results(tmp_path, capsys):
 
     assert play(77) == play(77)
     assert play(77) != play(78)
+
+
+def test_arena_exports_and_replays_a_game_from_an_opening(tmp_path):
+    """Every book opening is a non-start position, so the PGN needs a [FEN] header.
+
+    Without one, `--replay` fails on every file the arena writes — including the
+    one the CLI prints as a hint the moment it finishes a run.
+    """
+    from arena import run_single_game, export_to_pgn, replay_game
+    from chess_core import RATED_TIME_CONTROL_NS, RATED_INCREMENT_NS
+    from opening_book import OPENING_BOOK
+
+    opening = OPENING_BOOK[0]
+    result = run_single_game(
+        white_bot=ref_greedy_choose_move,
+        black_bot=ref_random_choose_move,
+        white_name="greedy",
+        black_name="random",
+        time_control_ns=RATED_TIME_CONTROL_NS,
+        increment_ns=RATED_INCREMENT_NS,
+        opening_fen=opening,
+    )
+    assert result.opening_fen == opening
+
+    pgn_path = tmp_path / "games.pgn"
+    export_to_pgn([result], str(pgn_path), tracker=None)
+
+    text = pgn_path.read_text()
+    assert '[SetUp "1"]' in text
+    assert f'[FEN "{opening}"]' in text
+
+    assert replay_game(str(pgn_path), 1) == len(result.moves_san)

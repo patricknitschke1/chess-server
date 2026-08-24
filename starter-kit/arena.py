@@ -59,6 +59,7 @@ class GameResult:
     white_illegal_attempts: int
     black_illegal_attempts: int
     ply_count: int
+    opening_fen: Optional[str] = None  # None means the standard starting position
 
 
 def run_single_game(
@@ -95,8 +96,9 @@ def run_single_game(
     
     # Initialize clock
     now_ns = time.monotonic_ns()
-    # Openings are randomised (§17), so roughly half start with Black to move. The
-    # clock must agree with the board or every move is charged to the wrong side.
+    # Every book opening is White to move, but the clock is built from the board
+    # rather than assumed, so a future Black-to-move opening cannot charge the
+    # wrong side.
     starting_side = Color.WHITE if board.turn == chess.WHITE else Color.BLACK
     clock = create_clock(time_control_ns, increment_ns, starting_side, now_ns)
     
@@ -136,7 +138,8 @@ def run_single_game(
                 black_flags=1 if black_flagged else 0,
                 white_illegal_attempts=white_illegal_attempts,
                 black_illegal_attempts=black_illegal_attempts,
-                ply_count=ply
+                ply_count=ply,
+                opening_fen=opening_fen
             )
         
         # Select bot
@@ -187,7 +190,8 @@ def run_single_game(
                 black_flags=0,
                 white_illegal_attempts=white_illegal_attempts,
                 black_illegal_attempts=black_illegal_attempts,
-                ply_count=ply
+                ply_count=ply,
+                opening_fen=opening_fen
             )
         
         end_ns = time.monotonic_ns()
@@ -227,7 +231,8 @@ def run_single_game(
                 black_flags=1 if black_flagged else 0,
                 white_illegal_attempts=white_illegal_attempts,
                 black_illegal_attempts=black_illegal_attempts,
-                ply_count=ply
+                ply_count=ply,
+                opening_fen=opening_fen
             )
         
         # Validate and apply move
@@ -255,7 +260,8 @@ def run_single_game(
                         black_flags=0,
                         white_illegal_attempts=white_illegal_attempts,
                         black_illegal_attempts=black_illegal_attempts,
-                        ply_count=ply
+                        ply_count=ply,
+                        opening_fen=opening_fen
                     )
             else:
                 black_illegal_attempts += 1
@@ -275,7 +281,8 @@ def run_single_game(
                         black_flags=0,
                         white_illegal_attempts=white_illegal_attempts,
                         black_illegal_attempts=black_illegal_attempts,
-                        ply_count=ply
+                        ply_count=ply,
+                        opening_fen=opening_fen
                     )
             
             # Log but continue (not three strikes yet)
@@ -312,7 +319,8 @@ def run_single_game(
         black_flags=0,
         white_illegal_attempts=white_illegal_attempts,
         black_illegal_attempts=black_illegal_attempts,
-        ply_count=ply
+        ply_count=ply,
+        opening_fen=opening_fen
     )
 
 
@@ -449,6 +457,7 @@ def export_to_pgn(
                 core_result,
                 white_rating,
                 black_rating,
+                result.opening_fen,
             ))
             f.write("\n\n")
 
@@ -496,8 +505,7 @@ def replay_game(pgn_path: str, game_number: int) -> int:
     if game.errors:
         raise ValueError(
             f"Game {game_number} in {pgn_path} could not be read back: {game.errors[0]}. "
-            f"A game that started from an opening position needs a [FEN] header in its "
-            f"PGN, which the exporter does not yet write."
+            f"The file may have been hand-edited, or written by an older arena."
         )
 
     board = game.board()

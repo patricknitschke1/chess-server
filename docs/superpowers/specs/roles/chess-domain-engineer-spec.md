@@ -78,7 +78,7 @@ If your work requires opening a socket, reading the system clock (`time.monotoni
 
 4. **Notation conversion**
    - `uci_to_san(fen: str, move_uci: str) -> str` — for move history
-   - `san_list_to_pgn(san_moves: List[str], white_name: str, black_name: str, result: GameResult, white_rating: Optional[int], black_rating: Optional[int]) -> str` — for arena.py export
+   - `san_list_to_pgn(san_moves: List[str], white_name: str, black_name: str, result: GameResult, white_rating: Optional[int], black_rating: Optional[int], starting_fen: Optional[str]) -> str` — for arena.py export. `starting_fen` writes `[SetUp "1"]`/`[FEN ...]` and numbers movetext from that position; every arena opening is a non-start position, so omitting it makes the export unreadable.
 
 5. **ASCII board rendering** (§13.2)
    - `fen_to_ascii(fen: str) -> str` — for MCP `get_game()`, readable on a projector
