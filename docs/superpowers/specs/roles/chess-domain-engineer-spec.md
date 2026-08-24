@@ -159,12 +159,12 @@ If your work requires opening a socket, reading the system clock (`time.monotoni
 1. **Two-sided exchange for decisive games** (§10.1)
    - `compute_rating_exchange(winner_rating: int, loser_rating: int) -> (RatingUpdate, RatingUpdate)`
    - K=24 flat for all bots, always
-   - Exchange is **zero-sum and symmetric**
+   - Exchange is **zero-sum**. It is **not swap-symmetric** — the underdog gains more than the favourite
 
 2. **Two-sided exchange for draws** (§10.1)
    - `compute_draw_exchange(white_rating: int, black_rating: int) -> (RatingUpdate, RatingUpdate)`
    - K=24 flat
-   - Exchange is **zero-sum and symmetric**
+   - Exchange is **zero-sum**. Equal ratings move nothing
 
 3. **One-sided exchange against anchors** (§10.3)
    - `compute_one_sided_exchange(competitor_rating: int, anchor_rating: int, competitor_won: bool) -> RatingUpdate`
@@ -177,7 +177,7 @@ If your work requires opening a socket, reading the system clock (`time.monotoni
 
 **Normative:**
 - §10.1: **Flat K=24 for all bots, always.** No two-tier K. "Provisional" is a leaderboard annotation for bots under 10 games — display only, never arithmetic.
-- §10.1: **Elo is zero-sum and symmetric** for competitor-vs-competitor. There is a property test asserting this.
+- §10.1: **Elo is zero-sum** for competitor-vs-competitor. There is a property test asserting this across the rating range. It is **not swap-symmetric** and no test may assert that it is — swapping the two ratings changes the magnitude, which is the entire point of Elo.
 - §10.3: **One-sided updates for anchors.** Competitor moves, anchor does not. This injects points into the pool per game but the injection shrinks as the competitor's rating approaches the anchor's. Combined with §9.3's ±400 gate, total injection over a workshop day is small and self-limiting.
 
 ---
@@ -194,7 +194,7 @@ If your work requires opening a socket, reading the system clock (`time.monotoni
      3. Skip if same `owner` or if it repeats `last_opponent_id`
      4. Bot with `unpaired_ticks >= 3` has constraints dropped: same-owner first, then rematch
      5. **Colour precedence:** alternate from `last_color`; tie-break by lower `white_count`, then lower `bot_id`
-   - Deterministic and seeded-testable
+   - Deterministic. The algorithm has **no random component**, so the result does not depend on `seed`. `seed` is retained only because the signature is pinned in the interfaces document; `pair_bots` must never call `random.seed`, which would mutate process-global state and break purity.
 
 2. **Anchor gating** (§9.3)
    - `should_offer_anchor(bot: PoolEntry, anchor: PoolEntry, has_other_pairing_option: bool) -> bool`
@@ -205,7 +205,7 @@ If your work requires opening a socket, reading the system clock (`time.monotoni
    - `ANCHOR_RATING_WINDOW = 400`
 
 **Normative:**
-- §9.2: Input is an **explicit snapshot** (`List[PoolEntry]`) so the function stays pure and seeded-testable. No I/O, no clock reads.
+- §9.2: Input is an **explicit snapshot** (`List[PoolEntry]`) so the function stays pure and repeatable. No I/O, no clock reads, no global state.
 - §9.2: Sorting by `games_played` first means new bots play within seconds. Sorting by rating second gives near-neighbour pairings.
 - §9.2: **Colour precedence is explicit:** alternate from `last_color`. On conflict, lower `white_count` takes White; if tied, lower `bot_id`.
 - §9.3: **Beyond ±400 the game is foregone** and the rating delta is negligible, so it is wasted board time.
@@ -280,7 +280,9 @@ Contract: threefold detection compares `position_key(fen)` strings, never full F
 For competitor-vs-competitor games:
 - `winner_delta + loser_delta = 0` (exactly)
 - `white_delta + black_delta = 0` (exactly)
-- Exchange is symmetric: swapping ratings produces negated deltas
+- The underdog gains more than the favourite
+
+**The exchange is not swap-symmetric.** `compute_rating_exchange(1000, 1400)` gives the winner +22; `compute_rating_exchange(1400, 1000)` gives the winner +2. A test asserting `compute_rating_exchange(A, B) == negate(compute_rating_exchange(B, A))` cannot be made to pass and must not be written. Revisions 1–5 of this document claimed otherwise.
 
 ### One-sided anchor exception (elo.py)
 
@@ -365,7 +367,7 @@ All signatures are pinned in **Interfaces Part 1**. Bind to them; do not invent 
 You should consume **almost nothing** but `python-chess`. State this explicitly:
 
 - **python-chess library** — for `chess.Board`, `chess.Move`, move generation, legal-move validation, termination detection
-- **Standard library only** — `dataclasses`, `enum`, `typing`, `random` (for seeded matchmaker)
+- **Standard library only** — `dataclasses`, `enum`, `typing`. Not `random`: nothing in `chess_core` has a random component, and seeding the global RNG is the one purity violation this module has already shipped once.
 
 **You do NOT consume:**
 - `time.monotonic_ns()` — time is passed to you as a parameter
@@ -411,7 +413,7 @@ Enumerate the specific cases that must be tested:
 3. **Same owner blocks pairing** — skipped until `unpaired_ticks >= 3`
 4. **Rematch blocks pairing** — skipped until `unpaired_ticks >= 3`
 5. **Colour precedence determinism** — tie-break by `white_count`, then `bot_id`
-6. **Seeded determinism** — same pool snapshot + same seed → identical pairings
+6. **Pairing determinism** — same pool snapshot → identical pairings, whatever `seed` is passed
 
 ### Match state machine edge cases (match.py)
 
@@ -451,8 +453,10 @@ Per Interfaces Part 4 and §18, these are the tests that **must exist**:
 
 ### `test_elo.py`
 
-- **Property test:** `test_elo_zero_sum_symmetric` — generate random rating pairs, assert `winner_delta + loser_delta = 0` and `compute_rating_exchange(A, B) = negate(compute_rating_exchange(B, A))`
+- **Property test:** `test_elo_zero_sum` — sweep the rating range, assert `winner_delta + loser_delta = 0`
+- `test_underdog_gains_more_than_the_favourite` — 1000 beats 1400 moves 22; 1400 beats 1000 moves 2
 - `test_draw_exchange_zero_sum` — white_delta + black_delta = 0
+- `test_draw_between_equal_ratings_moves_nothing` — swept, both deltas exactly 0
 - `test_one_sided_exchange_competitor_only` — anchor rating unchanged
 - `test_extreme_rating_gaps` — 1000 vs 2000, verify exchange is sane
 
@@ -462,7 +466,8 @@ Per Interfaces Part 4 and §18, these are the tests that **must exist**:
 - `test_pair_skips_same_owner` — until `unpaired_ticks >= 3`
 - `test_pair_skips_rematch` — until `unpaired_ticks >= 3`
 - `test_colour_precedence` — alternate from `last_color`, tie-break by `white_count`, then `bot_id`
-- `test_seeded_determinism` — same pool + same seed → identical pairings
+- `test_pairing_is_deterministic_and_ignores_seed` — same pool → one pinned pairing list, for every seed
+- `test_pair_bots_does_not_mutate_the_global_rng` — purity
 - `test_should_offer_anchor_within_400` — returns `True` at 400, `False` at 401
 - `test_should_offer_anchor_only_when_idle` — `has_other_pairing_option=False`
 
@@ -487,7 +492,7 @@ How someone else verifies your track is done:
 
 1. **All public functions have tests** — coverage ≥90% for `chess_core/`
 2. **Property test passes** — Elo zero-sum and symmetry for 1000 random rating pairs
-3. **Seeded matchmaker test passes** — identical output for identical input+seed
+3. **Matchmaker determinism test passes** — identical output for identical input, independent of `seed`
 4. **Table-driven clock tests pass** — all §6.4 ordering cases
 5. **No I/O, no clock reads** — `grep -r "time.monotonic" chess_core/` returns nothing
 6. **Unit suffix discipline** — every time field/parameter has `_ns` or `_ms`

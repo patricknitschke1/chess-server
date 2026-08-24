@@ -418,7 +418,9 @@ def compute_rating_exchange(
 ) -> tuple[RatingUpdate, RatingUpdate]:
     """Compute two-sided Elo exchange for a decisive game, K=24 flat per §10.1.
     
-    Exchange is zero-sum and symmetric.
+    Exchange is zero-sum. It is NOT swap-symmetric: an upset (1000 beats 1400)
+    moves 22 points, the expected result (1400 beats 1000) moves 2. The underdog
+    always gains more than the favourite.
     
     Args:
         winner_rating: Winner's current rating
@@ -435,7 +437,8 @@ def compute_draw_exchange(
 ) -> tuple[RatingUpdate, RatingUpdate]:
     """Compute two-sided Elo exchange for a draw, K=24 flat per §10.1.
     
-    Exchange is zero-sum and symmetric.
+    Exchange is zero-sum. Equal ratings move nothing; otherwise the favourite
+    loses points to the underdog.
     
     Args:
         white_rating: White's current rating
