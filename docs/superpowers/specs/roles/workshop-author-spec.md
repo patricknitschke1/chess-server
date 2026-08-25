@@ -1,9 +1,15 @@
 # Workshop Author — Role Specification
 
+> **SCOPE REDUCTION — read this first, it overrides everything below.**
+>
+> This track is cut down to **a README and a quickstart**, plus the one skill that must exist: `chess-engine-techniques`. Attendee agents, commands and the remaining skills (`writing-a-chess-bot`, `benchmarking-a-bot`, `diagnosing-bot-losses`) are **cut** (design §19, §21).
+>
+> Anything in this document about the MCP surface (§13), challenges (§12) or exhibition time control (§11) is cut with those sections. There is no `.mcp.json` to document.
+
 **Date:** 2026-08-24  
 **Role:** workshop-author  
-**Authority:** [docs/superpowers/specs/2026-08-23-chess-arena-design.md](../2026-08-23-chess-arena-design.md) §11, §13, §17, §19  
-[docs/superpowers/specs/2026-08-23-chess-arena-interfaces.md](../2026-08-23-chess-arena-interfaces.md) Part 3 (bot signature), Part 6 (MCP tools)  
+**Authority:** [docs/superpowers/specs/2026-08-23-chess-arena-design.md](../2026-08-23-chess-arena-design.md) §17, §19  
+[docs/superpowers/specs/2026-08-23-chess-arena-interfaces.md](../2026-08-23-chess-arena-interfaces.md) Part 3 (bot signature)  
 **Status:** Phase 8 — build after server, SDK, MCP, and dashboard are verifiable
 
 ---

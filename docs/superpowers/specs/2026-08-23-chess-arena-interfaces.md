@@ -840,7 +840,7 @@ Fired when a bot hasn't polled for 30+ seconds.
 }
 ```
 
-#### `challenge_updated`
+#### `challenge_updated` — **CUT** with design §12. No producer, no consumer.
 Unified event for all challenge state changes. The status field carries
 the transition: created, accepted, queued, consumed, declined, expired,
 or cancelled.
@@ -1315,7 +1315,8 @@ class NoGameResponse(BaseModel):
   Implemented by `server-engineer`. The MCP `get_my_bot()` tool is a consumer of this
   route and its `MyBotResult` is this shape; it implements nothing.
 
-**POST /bots/me/control**
+**POST /bots/me/control** — **CUT** with design §13.3. No `controller` column, no control routes. Model retained below for the record only.
+
 - **Authenticated**
 - **Request:**
   ```python
@@ -1754,7 +1755,11 @@ deferred with it. The models return with the dashboard panel that renders them.
 
 ---
 
-## Part 6 — MCP Tool Signatures
+## Part 6 — MCP Tool Signatures — **CUT**
+
+Cut with design §13 in the scope reduction. There is no MCP server, no tool surface and no `mcp-engineer` track. Everything below this line is retained only as a record of what was designed — **do not build it.**
+
+---
 
 All tools use `Authorization: Bearer <token>` forwarded from `.mcp.json`.
 

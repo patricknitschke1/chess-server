@@ -1,5 +1,13 @@
 # Dashboard Engineer — Role Specification
 
+> **SCOPE REDUCTION — read this first, it overrides everything below.**
+>
+> **Build Big Screen only.** My Bot mode is **cut** (design §14), and with it the live-games grid, click-to-watch, the `?bot=` "YOU" badge, the personal rating sparkline and the local-arena panel. Roughly a third of this document describes those; treat every mention of "My Bot", "watching", "grid cell" and "arena report" as cut.
+>
+> Also cut: the rated/unrated colour split (every server game is rated now — the only unrated ones are aborts), and anything MCP-related.
+>
+> What remains: one featured game rendered large, a leaderboard rail, a results ticker, the health banner, and SSE consumption with `{run, seq}` gap detection. Untrusted-string rendering via `textContent` is **not** negotiable and is not cut.
+
 > **Revision 5 errata — binding, and they override anything below that disagrees.**
 > Applied from [the round-4 review](../../../agent-reports/2026-08-24-spec-review-round4.md). Where this spec and design spec revision 5 conflict, **the design spec wins**.
 >
