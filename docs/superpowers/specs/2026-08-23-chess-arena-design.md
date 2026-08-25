@@ -7,7 +7,9 @@
 
 **What revision 5 addresses** (from [the round-4 review](../../agent-reports/2026-08-24-spec-review-round4.md)): the delivery trigger is now named and exclusive (§6.2), so games actually start; `write_lock` is acquired at exactly one place per call stack (§4.1), so the ticker cannot deadlock against itself; SSE events are buffered and flushed after commit (§4.1); the control-handoff and analysis endpoints have a producer (§8.1); `rated` is written at creation (§5.1); attendee-controlled strings are constrained and escaped (§8.5, §14); the flag predicate is `remaining_ns <= 0` (§6.4); `seats.bot_id` is `NOT NULL` (§4.3); arena-report retention orders by `id` (§5); the matchmaker is an algorithm (§9.2); and a canonical constants table exists (§5.2).
 
-**Companion document:** [2026-08-23-chess-arena-interfaces.md](2026-08-23-chess-arena-interfaces.md) pins the module boundaries this spec describes — `chess_core` signatures, the SSE event catalog, the bot/SDK surface, HTTP request/response models, MCP tool contracts, and test conventions. This spec says *what and why*; the interfaces document says *exactly what the seams look like*, so tracks can be built in parallel without inventing conflicting APIs. Where the two disagree, this spec wins and the interfaces document is corrected.
+**Companion document:** [2026-08-23-chess-arena-interfaces.md](2026-08-23-chess-arena-interfaces.md) pins the module boundaries this spec describes — `chess_core` signatures, the SSE event catalog, the bot/SDK surface, HTTP request/response models, and test conventions. This spec says *what and why*; the interfaces document says *exactly what the seams look like*, so tracks can be built in parallel without inventing conflicting APIs. Where the two disagree, this spec wins and the interfaces document is corrected.
+
+> **Scope reduction.** §10.4 (benchmark bots), §11's exhibition control, §12 (challenges) and §13 (MCP surface, including §13.3 control handoff) are **CUT**, along with My Bot mode in §14 and most of §15's admin surface. Cut sections are left as one-line tombstones rather than deleted, because renumbering would break every `§x.y` reference in the other documents and in code comments. **Do not build anything marked CUT.**
 
 ---
 
@@ -30,10 +32,9 @@
 | Bot execution | **Client-side** | Removes sandboxing and the untrusted-code threat model entirely. |
 | What a bot is | Any program implementing `choose_move` | Server speaks a protocol; engines and agents are equally valid clients. |
 | Transport | **Long-polled REST + per-bot mailbox** | `curl`-able, language-agnostic; the mailbox makes a dropped response survivable (§8.4). |
-| Time control | **3+2 blitz** rated; exhibition control for agent bots (§11) | |
+| Time control | **3+2 blitz**, one control for all play (§11) | |
 | Persistence | **SQLite only** | |
 | Concurrency | **Single process, single writer, one lock, one transaction per critical section** | §4 |
-| MCP transport | Streamable HTTP at `/mcp` | One-line attendee setup. |
 
 ---
 
@@ -51,11 +52,10 @@ chess_server/
   store/             # SQLite repositories; one writer connection, one lock
   engine/
     runner.py        # applies moves, transitions games, persists
-    ticker.py        # THE single supervised loop: pair, consume challenges, expire, flag
+    ticker.py        # THE single supervised loop: pair, deliver, expire, flag
     reference_bots.py# anchors (in-process, trusted)
     mailbox.py       # per-bot delivery mailbox + poll waiters
   api/               # FastAPI routes, SSE, admin router
-  mcp/               # MCP server — an HTTP client of api/, no privileged access
 
 web/                 # dashboard, single page, SSE, no build step
 starter-kit/         # what attendees clone; bot.py is the only file they edit
@@ -69,7 +69,7 @@ starter-kit/         # what attendees clone; bot.py is the only file they edit
 
 ### 4.1 Single writer, one lock, one transaction
 
-All mutation of `games`, `moves`, `seats`, `bots`, `rating_history`, `challenges` happens while holding one process-wide `asyncio.Lock` (`store.write_lock`).
+All mutation of `games`, `moves`, `seats`, `bots`, `rating_history` happens while holding one process-wide `asyncio.Lock` (`store.write_lock`).
 
 **A critical section is a transaction.** Acquiring the lock issues `BEGIN IMMEDIATE`; the section ends with exactly one `COMMIT` or `ROLLBACK` before the lock is released. A failed CAS aborts the transaction rather than leaving partial work.
 
@@ -86,7 +86,7 @@ Therefore **every mutating helper exists in two forms**:
 - an inner `*_locked(conn, ...)` form that assumes the lock is held and the transaction is open, and never acquires anything;
 - a thin outer form that opens `critical_section(...)` and calls the inner one.
 
-Route handlers call the outer form. **The ticker, and any other code already inside a critical section, calls only the `_locked` forms.** This applies to delivery, move application, finalisation, forfeit, abort, seat deletion, rating application and challenge transitions without exception.
+Route handlers call the outer form. **The ticker, and any other code already inside a critical section, calls only the `_locked` forms.** This applies to delivery, move application, finalisation, forfeit, abort, seat deletion and rating application without exception.
 
 **No SSE event is visible to any client before the transaction that produced it has committed.**
 
@@ -137,7 +137,7 @@ A NULL insert would otherwise become a phantom row occupying bot 1's seat, with 
 
 **A game is only reachable through `seats`.** Pool eligibility, delivery and the turn endpoint resolve a bot's current game by joining `seats`, never by scanning `games`. An orphan game row is therefore inert even if one were ever committed.
 
-**Game creation has exactly one creator: the ticker.** Challenges do not create games; they enqueue an intent that the ticker consumes (§12). This removes the second creation path entirely rather than trying to order two of them. A challenge whose seat is unavailable is rejected with `409` and prose explaining that the bot is already playing.
+**Game creation has exactly one creator: the ticker.** With challenges cut (§12) there is no second creation path at all — the property revision 3 worked to arrange now holds by construction.
 
 ### 4.4 Storage-level backstops
 
@@ -178,9 +178,10 @@ Its silent death stops pairing and flagging while the server still looks healthy
 All display timestamps are UTC wall clock. **All elapsed arithmetic uses `time.monotonic_ns()`** so an NTP step or a suspended lid cannot flag the board.
 
 **`bots`**
-`id, name UNIQUE, owner, token_hash INDEXED, role, rating, is_anchor, wins, losses, draws, games_played, controller DEFAULT 'client', last_agent_action_mono, last_poll_at, last_poll_mono, last_color, white_count, last_opponent_id, created_at`
+`id, name UNIQUE, owner, token_hash INDEXED, role, rating, is_anchor, wins, losses, draws, games_played, last_poll_at, last_poll_mono, last_color, white_count, last_opponent_id, created_at`
 
-- `controller` ∈ `client | agent` — who controls the bot (§13.3)
+- `role` ∈ `competitor | anchor`. `benchmark` was **cut** with §10.4.
+- `controller` and `last_agent_action_mono` were **cut** with §13.3.
 - `last_color`, `white_count`, `last_opponent_id` are the §9.4 pool-history fields. They live here, denormalised and updated in the finalising transaction, because `pair_bots` needs them every tick and deriving them from `games` is an O(games) scan three times over that three builders would derive three ways.
 
 **`games`**
@@ -193,7 +194,7 @@ All display timestamps are UTC wall clock. **All elapsed arithmetic uses `time.m
 - `termination` ∈ `checkmate | stalemate | insufficient | fifty_move | threefold | resignation | flag | illegal_forfeit | crash | abandoned | adjudicated | no_show | server_restart | admin_abort`
 
 `crash` is distinct from `illegal_forfeit`: the bot raised rather than returning a bad move. Both forfeit the game, but an attendee reading `illegal_forfeit` goes looking for a move-generation bug, while `crash` sends them to the traceback. The termination taxonomy exists so attendees can self-diagnose — collapsing the two defeats the point.
-- `source` ∈ `matchmaker | challenge`
+- `source` ∈ `matchmaker` — the ticker is the only creator of games
 
 **`seats`** — `bot_id PK, game_id` (§4.3)
 
@@ -203,12 +204,7 @@ All display timestamps are UTC wall clock. **All elapsed arithmetic uses `time.m
 
 **`rating_history`** — `bot_id, game_id, rating_before, rating_after, delta, ts`, UNIQUE `(game_id, bot_id)`
 
-**`challenges`** — `id, challenger_bot_id, opponent_bot_id, status, time_control_ms, increment_ms, created_at, created_mono, resolved_at, game_id, reason`
-`status` ∈ `open | queued | consumed | declined | expired`
-
-`created_mono` carries the TTL clock: `CHALLENGE_TTL_NS` is elapsed arithmetic, and this section opens by requiring all elapsed arithmetic to use `monotonic_ns()`. `created_at` is a display timestamp and must not be used to expire anything. §7.1 expires every non-terminal challenge on restart, because a `created_mono` from a dead process is meaningless.
-
-Revision 4 carried seven values. `accepted` was never written (accept marks `queued` directly) and `cancelled` had no endpoint; both are deleted rather than left as states an implementer must reason about and a test must cover.
+**`challenges`** — **CUT** with §12. No table, no repository, no routes.
 
 **The mailbox is process state, not a table.** `mailbox: dict[int, TurnPayload]`, mutated inside the same critical section as the delivery UPDATE (§6.2). §7.1 clears it on every start and nothing outside the process reads it, so a table bought a write on the hottest path under `write_lock` and a repository, in exchange for durability that recovery deliberately discards.
 
@@ -230,15 +226,10 @@ One name per constant. `chess_core/clock.py` and `chess_core/elo.py` are the onl
 
 | Constant | Value | Declared in | Meaning |
 |---|---|---|---|
-| `RATED_TIME_CONTROL_NS` | 180_000_000_000 | `clock.py` | 3 minutes, rated |
-| `RATED_INCREMENT_NS` | 2_000_000_000 | `clock.py` | 2 seconds, rated |
-| `EXHIBITION_TIME_CONTROL_NS` | 300_000_000_000 | `clock.py` | 5 minutes, exhibition (§11) |
-| `EXHIBITION_INCREMENT_NS` | 10_000_000_000 | `clock.py` | 10 seconds, exhibition |
-| `DELIVERY_GRACE_NS` | 15_000_000_000 | `clock.py` | undelivered deadline, `controller='client'` (§6.3) |
-| `AGENT_DELIVERY_GRACE_NS` | 60_000_000_000 | `clock.py` | undelivered deadline, `controller='agent'` |
-| `AGENT_AUTO_RELEASE_NS` | 45_000_000_000 | `clock.py` | agent inactivity before auto-release (§13.3) |
+| `RATED_TIME_CONTROL_NS` | 180_000_000_000 | `clock.py` | 3 minutes |
+| `RATED_INCREMENT_NS` | 2_000_000_000 | `clock.py` | 2 seconds |
+| `DELIVERY_GRACE_NS` | 15_000_000_000 | `clock.py` | undelivered deadline (§6.3) |
 | `POLL_RECENCY_NS` | 5_000_000_000 | `clock.py` | pool eligibility window (§9.1) |
-| `CHALLENGE_TTL_NS` | 60_000_000_000 | `clock.py` | `open` challenge lifetime (§12) |
 | `POLL_HOLD_NS` | 20_000_000_000 | `clock.py` | server long-poll hold (§8.4) |
 | `TICK_INTERVAL_NS` | 1_000_000_000 | `clock.py` | ticker period (§4.6) |
 | `PLY_CAP` | 200 | `rules.py` | adjudication cap (§22) |
@@ -255,17 +246,17 @@ Evaluated **first match wins**, top to bottom:
 | # | Condition | `rated` |
 |---|---|---|
 | 1 | Game ends `no_show`, `server_restart`, `admin_abort` | 0 |
-| 2 | Either participant has `role='benchmark'` | 0 |
 | 3 | Both bots share an `owner` | 0 |
-| 4 | `time_control_ns != RATED_TIME_CONTROL_NS` (exhibition) | 0 |
 | 5 | Exactly one participant `is_anchor` | 1, **one-sided** (§10.3) |
 | 6 | Otherwise | 1 |
 
-**`rated` is written at game creation from rules 2–6. Only rule 1's terminations override it, to `0`, in the finalising transaction.**
+Rules 2 (benchmark role) and 4 (exhibition time control) were **cut** with §10.4 and §11. Numbering retained so the rule ids in code and tests still line up.
 
-Rules 2–6 are all evaluable at creation: role, owner, anchor status and time control are known when the ticker inserts the row. Rule 1 is the only termination-time fact. Writing `rated=1` at creation "to be recomputed later" is wrong on the wire, not merely untidy: `rated` is carried live by `game_created`, `ActiveGameSummary` and `game_ended`, and §14 colour-codes from exactly that field. An exhibition game against an anchor would otherwise render green and badged **RATED** on the projector for its whole duration, then flip amber in the results ticker — which is precisely the confusion §14's colour rule exists to prevent.
+**`rated` is written at game creation from rules 3–6. Only rule 1's terminations override it, to `0`, in the finalising transaction.**
 
-A game whose `rated` is `0` by rules 2–4 stays `0`; rule 1 can only ever move `rated` from `1` to `0`, never back.
+Rules 3–6 are all evaluable at creation: owner and anchor status are known when the ticker inserts the row. Rule 1 is the only termination-time fact. Writing `rated=1` at creation "to be recomputed later" is wrong on the wire, not merely untidy: `rated` is carried live by `game_created`, `ActiveGameSummary` and `game_ended`.
+
+A game whose `rated` is `0` by rule 3 stays `0`; rule 1 can only ever move `rated` from `1` to `0`, never back.
 
 ---
 
@@ -302,7 +293,7 @@ The `delivered_to_mover=0` predicate is what makes re-delivery free. **Re-readin
 
 `delivered_to_mover` is cleared to 0 **in the same UPDATE as the side switch** (§6.4 step 5), along with `turn_started_mono = NULL` and a fresh `to_move_since_mono`.
 
-**Delivery goes over the channel named by `controller`:** the long-poll for `client`, `get_game()` / `get_legal_moves()` for `agent` (§13.3). One rule, two transports.
+**Delivery goes over the long-poll.** With §13.3 cut there is one channel and one rule.
 
 ### 6.3 Undelivered positions have a deadline
 
@@ -348,7 +339,7 @@ The pathological case is a client that dies permanently at that instant, which �
 
 ```mermaid
 stateDiagram-v2
-    [*] --> pending: ticker creates (pairing or queued challenge)
+    [*] --> pending: ticker creates (pairing)
     pending --> active: position delivered to side to move
     pending --> aborted: delivery grace at ply 0 (no_show)
     active --> finished: mate/draw/resign/flag/illegal_forfeit/abandoned/adjudicated
@@ -365,7 +356,7 @@ Every terminal transition deletes both `seats` rows in the same transaction.
 
 Recovery marks every `pending`/`active` game `aborted`, `termination='server_restart'`, `rated=0`, deletes all `seats` rows, clears all mailboxes, and assigns a new **run id** (§14).
 
-**Recovery must also clear every persisted monotonic-derived field.** `time.monotonic_ns()` has no meaning across a process restart — its zero point moves — so any stored `*_mono` value is comparing against a clock that no longer exists. On a machine whose new baseline is *lower* than the old one, `now_mono - last_poll_mono` goes negative and every bot ever registered looks like it is actively polling. Recovery therefore nulls `last_poll_mono` and `last_agent_action_mono`, and resets `controller` to its default — otherwise an attendee who called `take_control()` before the restart is locked out of their own bot for the rest of the day, with nothing logged.
+**Recovery must also clear every persisted monotonic-derived field.** `time.monotonic_ns()` has no meaning across a process restart — its zero point moves — so any stored `*_mono` value is comparing against a clock that no longer exists. On a machine whose new baseline is *lower* than the old one, `now_mono - last_poll_mono` goes negative and every bot ever registered looks like it is actively polling. Recovery therefore nulls `last_poll_mono`.
 
 This is why `_mono` values may only be compared with other `_mono` values taken in the same process, and why nothing may persist a monotonic deadline across a restart. Wall-clock timestamps are fine to persist; monotonic ones are not.
 
@@ -383,33 +374,23 @@ Bots re-poll, get "no game", and are re-paired within a tick.
 
 ```
 POST /bots                     register -> {bot_id, name, token}
-GET  /bots/me                  identity, rating, record, current game, controller
+GET  /bots/me                  identity, rating, record, current game
 GET  /bots/me/turn             long-poll, holds up to 20s; DELIVERS (§6.2)
 POST /bots/me/control          {action: "take" | "release"} -> {controller}
 POST /games/{id}/moves         {ply, move, client_reported_ms?}
 POST /games/{id}/resign        {ply}
-GET  /games/{id}/legal_moves   agent-only; DELIVERS (§6.2, §13.3)
-GET  /games/{id}/moves         move list with timings, for analyze_game
-POST /challenges               {opponent, time_control?}
-POST /challenges/{id}/accept   {}
-POST /challenges/{id}/decline  {}
-GET  /challenges               inbox for the authenticated bot
+GET  /games/{id}/moves         move list with timings
 GET  /leaderboard
 GET  /games/{id}
 GET  /bots/{bot_id}/rating_history
 GET  /state                    dashboard snapshot; returns current event id
 GET  /events                   SSE stream
 GET  /health
-POST /arena-reports            {candidate_name, opponent_name, games, wins, draws,
-                                losses, mean_move_ms, p95_move_ms, flags,
-                                illegal_attempts, seed, time_control_ms,
-                                increment_ms} -> {report_id}
-GET  /bots/{bot_id}/arena-reports  -> [{id, created_at, candidate_name, ...}]
 ```
 
-**Every route above is owned and implemented by `server-engineer`.** Revision 4 left `POST /bots/me/control`, `GET /bots/me`, `GET /games/{id}/moves` and `GET /bots/{bot_id}/rating_history` described only in the MCP and interfaces documents — so the surface §13.3 depends on was owned by the one track forbidden from writing routes. `mcp-engineer` owns the *tool* surface and consumes these; it never implements them.
+**Cut with the scope reduction:** `POST /bots/me/control` and `GET /games/{id}/legal_moves` (both §13.3, agent-only), all four `/challenges` routes (§12), and both `/arena-reports` routes (§21, producer deferred).
 
-`GET /games/{id}/legal_moves` was in no inventory at all until phase 3c, while §6.2, §13.3 and the MCP `get_legal_moves()` tool all required the behaviour behind it: it is the **agent's delivery site**, the counterpart to the long-poll. Its read-only name is misleading and deliberately so-noted — it moves a game `pending → active` and starts a clock.
+**Every route above is owned and implemented by `server-engineer`.**
 
 All authenticated endpoints use `Authorization: Bearer <token>` (§16.2).
 
@@ -433,7 +414,7 @@ Time control is echoed because §11 allows exhibition games; a client must not a
 {"game_id": null, "reason": "waiting_for_pairing"}
 ```
 
-`reason` ∈ `waiting_for_pairing | not_your_turn | agent_has_control | superseded | paused | no_seat`.
+`reason` ∈ `waiting_for_pairing | not_your_turn | superseded | paused | no_seat`. (`agent_has_control` was cut with §13.3.)
 
 A `204` would force clients to branch on status codes before parsing. Revision 2's `poll_token` field is deleted — it had no defined semantics and the mailbox makes it unnecessary.
 
@@ -474,7 +455,7 @@ Behind a proxy: `proxy_buffering off`, `proxy_read_timeout ≥ 60s`. Cloudflare'
 
 ### 9.1 Pool eligibility
 
-All must hold: `role IN ('competitor','anchor')`; no `seats` row; `controller='client'`; matchmaking not globally paused; and a poll currently held **or** `last_poll_mono` within 5s.
+All must hold: `role IN ('competitor','anchor')`; no `seats` row; matchmaking not globally paused; and a poll currently held **or** `last_poll_mono` within 5s.
 
 **The poll-recency clause applies to competitors only.** An anchor runs in-process and never polls, so requiring recency would make every anchor permanently ineligible, the anchor offer would never find a partner, and §9.3 would be unreachable code — silently, with the pool simply looking empty. Recency exists to prove a bot is actually running; for an anchor that is guaranteed by the server being up.
 
@@ -575,128 +556,62 @@ Anchor ratings are **provisional and deliberately uncalibrated** (see §21). The
 
 Nothing in the architecture depends on the numbers being right. Anchor gating (§9.3), one-sided exchange (§10.3) and the leaderboard all work with arbitrary anchor ratings — only the *meaning* of a competitor's rating changes. This is why calibration can be deferred without blocking any other track, and why it must not be quietly skipped.
 
-### 10.4 Attendee benchmark bots
+### 10.4 Attendee benchmark bots — **CUT**
 
-`role='benchmark'` bots are unrated, hidden from the leaderboard, excluded from auto-matchmaking, and challengeable. **Games involving a benchmark bot are unrated for both sides**, no exceptions. This is what makes self-play sparring safe and removes farming structurally.
+Cut with the scope reduction. There is no `benchmark` role, no one-competitor-per-owner rule, and no unrated-for-both-sides case. Attendees spar against previous versions in the **local arena**, which is built and is exactly what it is for.
 
-One `competitor` per owner is enforced at registration; further bots must be `benchmark`.
+Section number retained: `§10.4` is referenced elsewhere and renumbering would break every cross-reference.
 
 ---
 
 ## 11. Time control
 
-Rated play is **3+2** (`RATED_TIME_CONTROL_NS`, `RATED_INCREMENT_NS` — see §5.2).
+**All play is 3+2** (`RATED_TIME_CONTROL_NS`, `RATED_INCREMENT_NS` — see §5.2). One time control, one ladder.
 
-**3+2 is not viable for an LLM-agent bot** — at ~12s/move the budget is gone around move 18 (`180 + 2n − 12n < 0`). Revision 1's claim that the increment kept agent bots viable was wrong and is withdrawn.
+**3+2 is not viable for an LLM-agent bot** — at ~12s/move the budget is gone around move 18 (`180 + 2n − 12n < 0`). Revision 1's claim that the increment kept agent bots viable was wrong and is withdrawn. This no longer matters, because agent play was cut with §13.
 
-Mechanism, now that it has somewhere to live:
+`games.time_control_ms` / `increment_ms` remain per-game columns and the turn payload echoes both (§8.2), so a client never hard-codes 3+2. That costs nothing and leaves the door open.
 
-- `games.time_control_ms` / `increment_ms` are per-game columns; `challenges` carries the same pair.
-- `POST /challenges` and the MCP `challenge()` tool accept `time_control ∈ {"rated", "exhibition"}`. Exhibition is 300+10.
-- Exhibition games are **unrated** by §5.1 rule 4, so a slow agent game cannot distort the ladder.
-- The turn payload echoes both values (§8.2), so a client never assumes 3+2.
-
-A second rated division is deferred — two ladders splits an already-thin 20-bot pool.
+**Exhibition time control is CUT.** A second control bought `EXHIBITION_*` constants and a branch in §5.1's rated determination, to serve agent games that no longer exist.
 
 The dashboard holds a featured game for at least 20s before switching, so fast bots do not make the big screen unwatchable.
 
 ---
 
-## 12. Challenges
+## 12. Challenges — **CUT**
 
-Challenges exist for self-play against a previous version and for grudge matches. They do **not** create games (§4.3).
+Cut with the scope reduction. Matchmaking (§9) already pairs every eligible bot every tick, so a bot is never idle for want of an opponent; challenges bought a table, two routes, a ticker step, a TTL sweep and seat-race handling to serve a social nicety.
 
-```mermaid
-sequenceDiagram
-    Challenger->>API: POST /challenges {opponent}
-    API-->>Challenger: 201 open   (409 if either seat is taken)
-    Opponent->>API: GET /challenges (inbox)
-    Opponent->>API: POST /challenges/{id}/accept
-    API-->>Opponent: 200 queued
-    Ticker->>Ticker: consume queued challenge, create game if both seats free
-```
-
-- A challenge expires after 60s `open` and is swept by the ticker.
-- Accept marks it `queued`; the ticker consumes it **before** running pairing, so an accepted challenge always beats matchmaking to the seat.
-- If a seat is taken when the ticker consumes it, the challenge is marked `expired` and an SSE event explains why. No silent drop.
-- A bot may have one `open` outgoing challenge at a time.
+Section number retained — renumbering would break every cross-reference.
 
 ---
 
-## 13. MCP surface
+## 13. MCP surface — **CUT**
 
-### 13.1 Identity
+Cut with the scope reduction, along with §13.3 control handoff. The workshop is "write a chess bot with Claude's help": the bot is a Python file and Claude helps write it. MCP would have let Claude *play*, which is a different and much larger feature — an MCP server, a tool surface, identity handling, and a `controller` handoff protocol touching the clock, the ticker and the move endpoint.
 
-- `.mcp.json` carries `"headers": {"Authorization": "Bearer <token>"}`.
-- The MCP server forwards it verbatim. It has **no default token and no privileged path**; with no token every tool returns the same actionable error as the API.
-- `register_bot` returns a token **into the conversation transcript**. Documented plainly: the token is not a secret from the attendee's own Claude, it is a secret from other attendees. `run.py --register` is the primary path.
-- CORS configured for the dashboard origin; `Mcp-Session-Id` in `Access-Control-Expose-Headers`.
+What goes with it: the `controller` column, `take_control()` / `release_control()`, agent delivery grace, the agent auto-release ticker step, and the `AGENT_*` constants.
 
-### 13.2 Tools
-
-**Observe:** `get_leaderboard()`, `get_my_bot()`, `get_game(game_id?)`, `analyze_game(game_id)`
-**Act:** `register_bot(name, owner, role)`, `challenge(opponent, time_control?)`, `make_move(game_id, ply, move)`, `get_legal_moves(game_id)`, `take_control()`, `release_control()`
-
-`get_game()` defaults to the caller's current game and returns an **ASCII board** plus FEN, SAN history, clocks and turn. Claude reasons better over a board it can see, at a fraction of the tokens of JSON.
-
-`analyze_game` returns **PGN, per-move `server_elapsed_ms`, and explicit flag / strike / forfeit markers**. Eval swing was cut in revision 2: it implied an unacknowledged Stockfish dependency, and timing plus strike markers explain the overwhelming majority of real losses.
-
-Errors are actionable prose. Mutating tools carry `destructiveHint`; read-only tools `readOnlyHint`.
-
-### 13.3 Control handoff
-
-`controller` is per-bot and set under `write_lock`.
-
-- **`take_control()` is refused whenever the bot holds a `seats` row** (`409`, with prose). Revision 3 predicated this on "a `rated=1` game in progress", which is not evaluable: `rated` can still be revised at termination by §5.1 rule 1, and "in progress" was undefined for `pending`. Seat-held is unambiguous, is the same predicate matchmaking uses, and covers `pending` and `active` alike.
-- **Game creation checks `controller`.** Both §9.1 pool eligibility and §12 challenge consumption require `controller='client'` for both bots, unless the game is an exhibition (§11). Without this, a rated 3+2 game could be created *for* an agent-controlled bot immediately after the refusal above had passed.
-- Taking control **does not alter `turn_started_mono`**. A bot cannot pause its own clock by switching controller.
-- `take_control()` wakes any held poll, which returns `{"game_id": null, "reason": "agent_has_control"}`. There is no window where the SDK still believes it may move.
-- While `controller='agent'`, delivery happens on `get_game()` / `get_legal_moves()` under the §6.2 guard, and `AGENT_DELIVERY_GRACE_NS` applies.
-- `last_agent_action_mono` is updated by every agent tool call. After `AGENT_AUTO_RELEASE_NS` (45s) of inactivity the ticker sets `controller='client'` and wakes waiters. This must stay **below** `AGENT_DELIVERY_GRACE_NS` (60s); revision 3 had release at 120s, so the delivery grace always fired first and auto-release was unreachable code.
-- The move endpoint checks `controller` **inside the same transaction as the CAS**, returning `403` on mismatch. Authorisation is not a pre-check.
+Section number retained — renumbering would break every cross-reference.
 
 ---
 
 ## 14. Dashboard and SSE
 
-Two modes via a toggle (a deliberate product choice):
+**One mode: Big Screen.** One featured game large, leaderboard rail, results ticker. Readable from the back of the room.
 
-- **Big Screen** — one featured game large, leaderboard rail, results ticker. Readable from the back of the room.
-- **My Bot** — leaderboard, live game grid, personal panel with rating sparkline and recent results.
+**My Bot mode is CUT** with the scope reduction, and with it the live-games grid, click-to-feature, the `?bot=` "YOU" badge, the personal rating sparkline and the local-arena panel. It needed per-attendee state in an unauthenticated page to serve one person at a time, while the projector serves the room.
 
-### Viewing any server game
-
-In My Bot mode, the live games grid shows all active server games as small board thumbnails. **Clicking a grid cell makes that game featured locally** (client-side state only, not server-side). This allows attendees to watch their own game or others' games without changing what appears on the projector's Big Screen mode.
-
-To identify "my bot" in the dashboard (which is unauthenticated and read-only): URL parameter `?bot=BotName` or localStorage. Display a "YOU" badge next to that bot in grids and leaderboard. No authentication required—this is display sugar only.
-
-**Color coding for game types:**
-- Rated server games render **green**
-- Unrated server games render **amber**
-- Local arena reports (self-reported via `arena.py --report`) render **amber** with a visible "Local · self-reported" label
-
-Nobody should mistake a practice win for a ranked one, or unverified local data for server results.
+All server games are rated, so the rated/unrated colour split goes too — the only unrated games left are aborts, which are not worth a legend entry.
 
 ### Rendering untrusted strings
 
-Bot names, owners and arena-report labels are **attendee-controlled**, and the dashboard is the one place they are displayed to the whole room.
+Bot names and owners are **attendee-controlled**, and the dashboard is the one place they are displayed to the whole room.
 
-- The server constrains `name`, `owner`, `candidate_name` and `opponent_name` to `^[A-Za-z0-9 _-]{1,32}$` at every write path, rejecting with `422` and actionable prose (§8.5).
-- The dashboard renders every such string with `textContent` or an explicit escape — **never** by interpolating into an HTML template literal, and never via `innerHTML`. The same rule applies to `?bot=`, which is attacker-supplied by definition.
+- The server constrains `name` and `owner` to `^[A-Za-z0-9 _-]{1,32}$` at every write path, rejecting with `422` and actionable prose (§8.5).
+- The dashboard renders every such string with `textContent` or an explicit escape — **never** by interpolating into an HTML template literal, and never via `innerHTML`.
 
 Two independent layers, because either alone fails: validation could be relaxed later by someone who does not know the dashboard depends on it, and an escape could be missed in one cell. A bot named `<img src=x onerror=...>` must be boring at both ends.
-
-### Local arena reporting
-
-`arena.py --report` (opt-in) posts a summary of a completed local run to the server, authenticated with the bot token. The server stores it in `arena_reports`, emits an SSE event, and the dashboard shows it in the My Bot panel.
-
-**Hard constraints:**
-- `arena_reports` is **display-only**. No rating, matchmaking, leaderboard, seat, or game-finalisation code may ever read this table. This is an invariant, not a preference.
-- Local data is rendered **amber** with a visible "Local · self-reported" label in all contexts.
-- Local data **never appears in Big Screen mode**. The projector shows verified competition only.
-- Reporting is **opt-in** via `--report` flag. The arena remains fully functional offline; a failed POST logs a warning and never fails the run.
-
-The My Bot panel displays local reports alongside server game results, clearly distinguished by color and label. An attendee can see "I beat baseline 85/100 locally" without that number ever touching the rated leaderboard.
 
 **SSE:**
 
@@ -719,11 +634,9 @@ Behind `ADMIN_TOKEN`, never exposed to attendees:
 POST /admin/games/{id}/abort       CAS from the game's current status; frees seats,
                                    clears mailboxes, wakes waiters, unrated
 POST /admin/matchmaking/pause      global only; and /resume
-POST /admin/bots/{name}/token      re-issue; refused while the bot holds a seat
-POST /admin/reset                  wipe games/ratings/seats/mailboxes, reset bot
-                                   counters to zero, keep bot identities — for a dry run
-GET  /admin/consistency            assert ratings == 1200 + sum(rating_history)
 ```
+
+**Cut with the scope reduction:** `POST /admin/reset`, `GET /admin/consistency`, and `POST /admin/bots/{name}/token` (re-issue). Reset was never built and was the item with the most undefined behaviour; restarting the process does most of it through §7.1 recovery, which is already tested. A lost token is handled by registering a new bot.
 
 `paused` means **global matchmaking pause only** — revision 2 used the word for three different things. There is no per-bot pause; a bot that wants to stop playing stops polling.
 
@@ -772,7 +685,7 @@ The arena runs the same clock code as the server, so a bot that flags locally fl
 - **Delivery** — re-delivery does not restart the clock; delivery after side switch starts a fresh turn; mailbox drained by a reconnecting poll.
 - **Matchmaker** — seeded snapshots; colour precedence, same-owner and rematch relaxation after three ticks.
 - **Concurrency** — a move submission and a ticker flag pass fired at the same instant assert exactly one terminal transition and one `rating_history` row. This is the test that would have caught the revision 1 defect.
-- **Seats** — attempting a second game for a seated bot raises; challenge and pairing racing the same seat yields exactly one game.
+- **Seats** — attempting a second game for a seated bot raises; two pairings racing the same seat yields exactly one game.
 - **Recovery** — restart mid-game aborts unrated, frees seats, and a reconnecting bot is re-paired.
 - **API** — in-process scripted fake-bot harness playing complete games over the real endpoints.
 - **Failure paths first:** illegal-move strikes, flag-fall, mid-game disconnect (`abandoned`), CAS conflict, control handoff, no-show, superseded poll, admin abort.
@@ -798,14 +711,14 @@ Each build agent maps 1:1 onto a parallel track, and each track has exactly one 
 
 The two reviewers are distinct and must stay so. `design-adversary` reviews *documents* and may demand the spec change; `spec-reviewer` reviews *diffs* and treats the spec as authoritative. Collapsing them produces either a code reviewer who relitigates settled design on every change, or a design reviewer who assumes the spec is correct and therefore finds nothing.
 
-`mcp-engineer` and `server-engineer` are not redundant: one designs for HTTP clients, the other for a language model. `chess-domain-engineer` is isolated because it is the only place where being wrong is *silent*. `client-engineer` exists because the SDK, `bot.py` and `arena.py` are the only code twenty attendees actually read and modify — designing an API a novice cannot misuse is a distinct skill from server internals, and splitting that surface across three owners is the tangle the roster exists to prevent.
+`mcp-engineer` is **cut** with §13. `chess-domain-engineer` is isolated because it is the only place where being wrong is *silent*. `client-engineer` exists because the SDK, `bot.py` and `arena.py` are the only code twenty attendees actually read and modify — designing an API a novice cannot misuse is a distinct skill from server internals, and splitting that surface across three owners is the tangle the roster exists to prevent.
 
 **Attendee-facing skills** (`starter-kit/.claude/skills/`)
 
 - `chess-engine-techniques` — **the one that must exist.** Material values, piece-square tables, alpha-beta, move ordering, quiescence, 3+2 time management. Concrete and codeable; "consider king safety" is useless to a non-player.
-- `writing-a-chess-bot`, `benchmarking-a-bot`, `diagnosing-bot-losses`
+- The rest — `writing-a-chess-bot`, `benchmarking-a-bot`, `diagnosing-bot-losses` — are **cut** with the workshop-author reduction. A README, a quickstart and a readable `bot.py` carry the same load for one day.
 
-**Attendee-facing agents** — only where isolation pays. `eval-tuner` and `/improve-bot` are **stretch**, built only if the server ships early.
+**Attendee-facing agents** — cut. `eval-tuner` and `/improve-bot` were already stretch.
 
 **subagents isolate noisy work; skills inject knowledge into work you are already doing.** Corollary: make your tools return summaries and you need fewer subagents.
 
@@ -818,18 +731,32 @@ The two reviewers are distinct and must stay so. `design-adversary` reviews *doc
 3a. `store/` — schema, seats, CAS helpers, transaction discipline (§4)
 3b. `api/` + supervised ticker + anchors + fake-bot harness
 4. `chess_client` SDK — **the whole loop closes here**
-5. MCP server
-6. Dashboard + SSE + `/health` banner
-7. Admin surface
-8. Claude layer — `AGENTS.md`, skills, agents
+5. Dashboard (Big Screen) + SSE + `/health` banner
+6. README + quickstart
 
 Phases 2 and 4 are genuine stopping points. Phase 3 is split at the store/API boundary because §4 is the highest-risk code in the project and deserves to be green before anything is layered on it.
+
+The old phases 5 (MCP) and 7 (full admin surface) are **cut**, and phase 8's Claude layer is reduced to README and quickstart.
 
 ---
 
 ## 21. Cut and deferred
 
-**Cut:** Postgres capability; `analyze_game` eval swing; widening rating window; two-tier K; 150-move material adjudication; the separate 60s disconnect rule; `poll_token`; `Last-Event-ID` resume; per-bot pause; partial unique indexes for seat enforcement.
+**Cut in the scope reduction**, because the project was too expensive to finish as specified:
+
+| Cut | Section | Why |
+|---|---|---|
+| The whole MCP surface, incl. control handoff | §13 | A second way to play the game. The workshop is "write a bot with Claude's help" — the bot is a Python file. |
+| Challenges | §12 | Matchmaking already pairs everyone every tick. |
+| Benchmark bots / self-play | §10.4 | The local arena is what sparring is for, and it is built. |
+| Exhibition time control | §11 | Existed to serve agent games, which are cut. |
+| My Bot dashboard mode | §14 | Per-attendee state in an unauthenticated page; the projector serves the room. |
+| `/admin/reset`, `/admin/consistency`, token re-issue | §15 | Restart covers reset via §7.1; the rest is convenience. |
+| Attendee skills and agents beyond a README | §19 | One day, one quickstart. |
+
+Cut sections are **tombstoned, not deleted** — renumbering would break every `§x.y` reference in the other documents and in code comments.
+
+**Cut earlier:** Postgres capability; `analyze_game` eval swing; widening rating window; two-tier K; 150-move material adjudication; the separate 60s disconnect rule; `poll_token`; `Last-Event-ID` resume; per-bot pause; partial unique indexes for seat enforcement.
 
 **Deferred:** Swiss tournaments; a second rated division; bot code upload with sandboxing; spectator chat; cross-workshop leaderboards; `eval-tuner`; `/improve-bot`.
 
