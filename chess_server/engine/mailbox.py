@@ -89,8 +89,24 @@ async def deliver_for_poll(deps: EngineDeps, bot_id: int) -> Optional[GameRow]:
 
 
 def take_payload(bot_id: int, game: GameRow) -> Optional[TurnPayload]:
-    """Remove the payload and hand it over, or drop it on the floor."""
-    return state.mailbox.pop(bot_id, None)
+    """The payload for this exact position, or None — and a stale entry is dropped.
+
+    A served payload **stays** in the mailbox. It is the record of the position
+    currently delivered to this bot, which is what makes re-reading it free and
+    identical (§5.2); it is removed when the side switches or the game ends.
+    Draining it here instead would make the clear in `apply_move_locked`
+    unreachable, and §5.3's second layer the only one left standing.
+
+    `game_id` is compared as well as `ply`: a bot paired again sits at ply 0,
+    where a stale ply-0 payload from the previous game would otherwise match.
+    """
+    payload = state.mailbox.get(bot_id)
+    if payload is None:
+        return None
+    if payload.game_id != game.id or payload.ply != game.ply:
+        state.mailbox.pop(bot_id, None)
+        return None
+    return payload
 
 
 @dataclass
