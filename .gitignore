@@ -10,8 +10,11 @@ venv/
 
 # Local state
 *.db
+*.db-shm
+*.db-wal
 *.sqlite3
 .env
+*.bak
 
 # macOS
 .DS_Store

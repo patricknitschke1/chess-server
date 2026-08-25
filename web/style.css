@@ -98,7 +98,10 @@ aside { overflow: hidden; display: flex; flex-direction: column; }
 
 .board-grid {
   display: grid;
-  grid-template-columns: repeat(8, 1fr);
+  /* minmax(0, 1fr), not 1fr: 1fr floors each track at min-content, so when the
+     panel is short the empty ranks collapse while the ranks holding pieces do not. */
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  grid-template-rows: repeat(8, minmax(0, 1fr));
   aspect-ratio: 1 / 1;
   flex: 1;
   min-height: 0;
