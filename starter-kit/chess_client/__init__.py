@@ -6,4 +6,25 @@ of truth in chess_core.
 """
 from chess_core import ClockView
 
-__all__ = ["ClockView"]
+from chess_client.client import ChessClient
+from chess_client.errors import (
+    ClientError,
+    GameEnded,
+    MoveRejected,
+    NotYourTurn,
+    RateLimited,
+    ServerError,
+    TokenInvalid,
+)
+
+__all__ = [
+    "ChessClient",
+    "ClientError",
+    "ClockView",
+    "GameEnded",
+    "MoveRejected",
+    "NotYourTurn",
+    "RateLimited",
+    "ServerError",
+    "TokenInvalid",
+]
