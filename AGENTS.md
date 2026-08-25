@@ -63,7 +63,7 @@ starter-kit/     What attendees clone. bot.py is the only file they edit.
 - Python, `python-chess` for rules. Do not hand-roll move generation.
 - Small, focused files. A growing file usually means tangled responsibilities.
 - Test failure paths first — illegal moves, flag-fall, disconnects, CAS conflicts. Those are what break live.
-- **Prove every test can fail.** Write the test, watch it fail for the right reason, then implement. For anything subtle, mutate the code and confirm the test goes red. Eight tests shipped here that could not fail — two with no assertion at all, and one asserting an upper bound that a completely dead clock satisfied *more easily* than a working one. A test you have not watched fail is not evidence.
+- **Watch each test fail before implementing.** That is ordinary TDD and costs nothing. **Mutation testing is reserved for silent failures** — the clock, CAS, lock discipline, SSE ordering — where wrong code still returns a plausible answer. Elsewhere a passing suite is good enough. This is a deliberate reduction for cost; the full discipline found eleven real defects, so expect a few to slip through.
 - `chess_core` gets straight unit tests, no fixtures, no mocks.
 
 ## Local gotchas
@@ -72,7 +72,7 @@ Verified the hard way; each has cost real time here.
 
 - **Always `.venv/bin/pytest` and `.venv/bin/python`.** Never bare `pytest`/`python`.
 - **Never pipe a long test run through `tail`.** It buffers all output, the run looks idle, the terminal gets backgrounded as a suspected hang, and killing it dumps the whole scrollback into context.
-- **Clear `__pycache__` between mutation steps.** A `cp` restore inside the same second leaves a stale `.pyc` that Python reuses, so the "restored" run silently executes the mutant.
+- **Clear `__pycache__` between mutation steps**, on the rare occasions you mutate. A `cp` restore inside the same second leaves a stale `.pyc` that Python reuses, so the "restored" run silently executes the mutant.
 - **Server tests use a file-backed database under `tmp_path`, never `:memory:`.** Two connections to `:memory:` are two separate databases, so the reader/writer split, WAL and `BEGIN IMMEDIATE` contention become unobservable — exactly what §4 needs the tests to exercise.
 - **Verify library and SQLite claims by executing them.** Reading missed all of: `INTEGER PRIMARY KEY NOT NULL` still accepting NULL, `asyncio.CancelledError` not being an `Exception` subclass, and `ORDER BY created_at` with tied timestamps deleting the newest rows.
 
@@ -92,21 +92,15 @@ Subagent reports go in `docs/agent-reports/` — see [docs/agent-reports/README.
 
 ## How this project is built
 
-The goal is to **distil the specification according to each agent's responsibility**. From the two design documents we fan out subagents to write one role spec per track, each scoped to what that role must build.
+The specs are written. **They are no longer under active review** — the design spec went through five adversarial rounds and the server spec through a pre-build round, and that is enough. Build from them, and when one is wrong, fix it in the same change rather than opening another review pass.
 
-The orchestrator acts as a **senior systems-design manager**: it does not write the role specs itself, but it is accountable for the whole. Its job is to ensure no functionality is lost in the split, that each role spec is complete enough for its owner to build from without guessing, and that the seams between roles still meet.
+The orchestrator is accountable for the whole: no functionality lost between role specs, and the seams still meeting. It does not re-review settled text.
 
-Sequence:
+Remaining sequence per track: **role spec → implementation plan → build**, each track owned by exactly one agent.
 
-1. **Design spec** — what and why. Reviewed adversarially until findings stop being structural.
-2. **Interfaces** — the seams pinned precisely, so tracks cannot invent conflicting APIs.
-3. **Role specs** — one per agent in `docs/superpowers/specs/roles/`, distilled from the two documents above. This is the prerequisite for any implementation plan.
-4. **Implementation plans** — written per track, against the role spec.
-5. **Build** — each track owned by exactly one agent.
+**The arena must still be verifiable through the specs.** If a behaviour exists only in someone's head, it does not exist — a role spec that omits something means that thing does not get built. That has not changed; only the number of review rounds has.
 
-**The full chess arena must be verifiable through the specs.** If a behaviour exists only in someone's head, it does not exist. A role spec that omits something means that thing does not get built.
-
-The orchestrator's checks at step 3: every §-level requirement in the design spec is claimed by exactly one role; every interface in the interfaces document has both a producer and a consumer; and no role spec contradicts another at a seam.
+Reviews are now **on request, not by default.** Ask the user rather than dispatching a reviewer.
 
 ## Working here
 
