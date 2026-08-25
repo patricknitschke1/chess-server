@@ -222,6 +222,7 @@ class ChessClient:
         headers: dict,
     ) -> None:
         board = chess.Board(turn["fen"])
+        log.debug("Turn %s\n%s", turn.get("fen"), board.unicode(borders=True))
         clock = _clock_view(turn)
         started = time.monotonic()
         move = choose_move_fn(board, clock)
