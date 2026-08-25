@@ -13,7 +13,9 @@ When a decision trades cleverness against clarity, choose clarity. This code get
 
 ## Current state
 
-`chess_core/`, `starter-kit/` and `chess_server/` (store, engine, and most of the API) are built and green.
+`chess_core/`, `starter-kit/`, `chess_server/` and `web/` are built and green (703 tests). **The MVP is complete end to end:** an attendee registers with `starter-kit/run.py`, plays rated games, and the Big Screen dashboard at `/dashboard/` shows four live boards and the leaderboard.
+
+Run the server with `JOIN_CODE=... ADMIN_TOKEN=... .venv/bin/python -m chess_server`. A clean checkout needs `.venv/bin/python -m pip install -e .` once — and note the editable-install finder does **not** self-update when a new top-level package appears, so re-run it before believing an `ImportError`.
 
 **The scope was cut for cost.** MCP (§13, including control handoff), challenges (§12), benchmark bots (§10.4), exhibition time control (§11), My Bot dashboard mode (§14) and most of the admin surface (§15) are **gone**. Cut sections are tombstoned in the design spec rather than deleted — renumbering would break every `§x.y` reference. **Do not build anything marked CUT.** §21 has the full table.
 
