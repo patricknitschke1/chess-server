@@ -285,7 +285,7 @@ So the answer to the prompt's question — *does connect-then-snapshot close the
 
 #### N3-S7. `/admin/consistency` and the startup check fail on all three anchors, every start
 
-Round 2 gap 3, not fixed. §10.2 asserts `bots.rating == 1200 + Σ rating_history.delta` unconditionally; §10.3 gives anchors fixed ratings that never change and one-sided updates that produce no anchor rows. Every startup will log loudly for `ref-random`, `ref-greedy`, `ref-depth2`, and the operator will learn on day one that the alarm means nothing.
+Round 2 gap 3, not fixed. §10.2 asserts `bots.rating == 1200 + Σ rating_history.delta` unconditionally; §10.3 gives anchors fixed ratings that never change and one-sided updates that produce no anchor rows. Every startup will log loudly for `ref-random`, `ref-greedy`, `ref-depth3`, and the operator will learn on day one that the alarm means nothing.
 
 **Fix:** exempt `is_anchor` bots from the check and assert instead that they have **zero** `rating_history` rows and a rating equal to their configured constant. That is a stronger check and costs the same line.
 

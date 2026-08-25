@@ -546,7 +546,7 @@ Ratings are computed and applied inside the same transaction that finalises the 
 
 ### 10.3 Anchors
 
-`ref-random`, `ref-greedy`, `ref-depth2` have **fixed ratings that never change**. Games against them are rated **one-sidedly**: the competitor moves, the anchor does not.
+`ref-random`, `ref-greedy`, `ref-depth3` have **fixed ratings that never change**. Games against them are rated **one-sidedly**: the competitor moves, the anchor does not.
 
 **Draws against an anchor are rated**, using the standard Elo score term: 1.0 win, 0.5 draw, 0.0 loss. A draw against a stronger anchor gains points, against a weaker one loses them, and against an equal one moves nothing. Revision 5 had no draw rule at all — `competitor_won: bool` could not express one — and draws are roughly a third of anchor games, so the gap was not cosmetic. Leaving them unrated would also have made a draw against a stronger anchor free, which rewards shuffling for a result: exactly the behaviour §22's ply cap exists to bound.
 

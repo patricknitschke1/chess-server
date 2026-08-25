@@ -175,7 +175,7 @@ Delete "provisional under 10 games" as a rating rule; keep it purely as a **disp
 
 **Fix.** Split the concept — this also solves cold start properly:
 - **Attendee-registered benchmark bots:** games are `rated=0` for **both** sides, always. Purely sparring. State it in one sentence.
-- **Server reference bots (`ref-*`): make them rating *anchors*.** Give them fixed, hand-calibrated ratings (e.g. `ref-random` 800, `ref-greedy` 1100, `ref-depth2` 1450) that **never update**, and make them auto-pairable, not challenge-only. Games against them are rated for the competitor side only. The one-sided exchange is safe here because the anchor rating is correct and fixed: Elo self-limits farming, since a 1450-rated bot beating an 800-rated anchor gains under 1 point. This anchors the whole scale to a known reference, fixes cold start at 09:00 (there are always three opponents), and gives the calibration ladder §5 wants.
+- **Server reference bots (`ref-*`): make them rating *anchors*.** Give them fixed, hand-calibrated ratings (e.g. `ref-random` 800, `ref-greedy` 1100, `ref-depth3` 1450) that **never update**, and make them auto-pairable, not challenge-only. Games against them are rated for the competitor side only. The one-sided exchange is safe here because the anchor rating is correct and fixed: Elo self-limits farming, since a 1450-rated bot beating an 800-rated anchor gains under 1 point. This anchors the whole scale to a known reference, fixes cold start at 09:00 (there are always three opponents), and gives the calibration ladder §5 wants.
 - Note and accept the tradeoff: anchors inject and remove points from the pool. For a one-day closed pool that is a feature — it prevents the drift you would otherwise get from a fully closed system.
 
 ---

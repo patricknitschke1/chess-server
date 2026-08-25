@@ -12,9 +12,9 @@ I did not write a file to `docs/agent-reports/` — you instructed read-only. Th
 
 ## Critical
 
-### C1. `ref_depth2` searches with an inverted min/max flag — it assumes the opponent plays the move best *for it*
+### C1. `ref_depth3` searches with an inverted min/max flag — it assumes the opponent plays the move best *for it*
 
-[starter-kit/ref_bots/ref_depth2.py](starter-kit/ref_bots/ref_depth2.py#L120)
+[starter-kit/ref_bots/ref_depth3.py](starter-kit/ref_bots/ref_depth3.py#L120)
 
 `evaluate_position` is scored from a fixed White perspective (correct). So `maximizing` must be true exactly when **White is to move at that node**. The call site passes `not board.turn`, evaluated *after* `board.push(move)`:
 
@@ -41,23 +41,23 @@ Measured impact (`/tmp/chk3.py`, 6 games, seed 7, alternating colours): shipped 
 
 This is the same shape as the `bot.py` mate bug you already fixed: a search parameter derived from a mutable `board.turn` at the wrong moment. Note `evaluate_position` here got it *right* (fixed White perspective) — the defect is in the flag, not the eval.
 
-**Why it matters beyond the bot:** §10.3 says anchor ratings bias every rating in the room. `ref_depth2` is an anchor.
+**Why it matters beyond the bot:** §10.3 says anchor ratings bias every rating in the room. `ref_depth3` is an anchor.
 
 ---
 
 ### C2. The reference ladder does not have the ordering the docstrings and the client spec claim
 
-`ref_depth2.py` line 105 says *"Calibrated rating: 1200 (measured from seeded arena ladder)"*; `ref_greedy.py` line 21 says 1000; `ref_random.py` line 11 says 800. §10.3: *"Anchor ratings are calibrated before the workshop from one seeded arena ladder, and the measured numbers are recorded next to the constants. Guessed anchor ratings would bias every rating in the room."*
+`ref_depth3.py` line 105 says *"Calibrated rating: 1200 (measured from seeded arena ladder)"*; `ref_greedy.py` line 21 says 1000; `ref_random.py` line 11 says 800. §10.3: *"Anchor ratings are calibrated before the workshop from one seeded arena ladder, and the measured numbers are recorded next to the constants. Guessed anchor ratings would bias every rating in the room."*
 
 Running the ladder as specified:
 
 ```
 $ cd starter-kit && ../.venv/bin/python arena.py --bots bot.py ref_bots/ref_random.py \
-    ref_bots/ref_greedy.py ref_bots/ref_depth2.py --games 48 --seed 7
+    ref_bots/ref_greedy.py ref_bots/ref_depth3.py --games 48 --seed 7
 
 Bot                  Rating   W   L   D Games
 bot                    1303  14   0  10    24
-ref_depth2             1226   5   2  17    24
+ref_depth3             1226   5   2  17    24
 ref_greedy             1173   4   9  11    24
 ref_random             1098   0  12  12    24
 ```
@@ -69,7 +69,7 @@ Two separate problems:
 2. **The shipped baseline never loses.** Client-engineer spec §3.1: *"Should beat `ref-random` reliably **and lose to `ref-greedy` reliably**, so attendees see rating movement in both directions immediately."* Head-to-head, 8 games each, seed 7 (`/tmp/chk4.py`):
 
 ```
-   ref_depth2 vs ref_greedy   {'ref_depth2': 5.0, 'ref_greedy': 3.0}
+   ref_depth3 vs ref_greedy   {'ref_depth3': 5.0, 'ref_greedy': 3.0}
    ref_greedy vs ref_random   {'ref_greedy': 7.0, 'ref_random': 1.0}
  baseline_bot vs ref_greedy   {'baseline_bot': 6.0, 'ref_greedy': 2.0}   <-- spec says this should lose
  baseline_bot vs ref_random   {'baseline_bot': 6.5, 'ref_random': 1.5}
@@ -77,7 +77,7 @@ Two separate problems:
 
 In the 48-game ladder, `bot` goes **14–0–10**. An attendee who changes nothing sees their rating go up and never come down. The "rating movement in both directions immediately" property is not there.
 
-C1 is a contributing cause — fixing `ref_depth2` should raise the top of the ladder — but note `ref_greedy` is the bot the spec designates as the baseline's superior, and it is beaten 75%. Recalibrating the docstring numbers without re-checking this ordering would just record the wrong ladder more precisely.
+C1 is a contributing cause — fixing `ref_depth3` should raise the top of the ladder — but note `ref_greedy` is the bot the spec designates as the baseline's superior, and it is beaten 75%. Recalibrating the docstring numbers without re-checking this ordering would just record the wrong ladder more precisely.
 
 ---
 
@@ -141,7 +141,7 @@ Interfaces Part 1's `clock.py` constant block omits them too, so this is spec-to
 
 [chess_core/elo.py](chess_core/elo.py#L96) — `competitor_won: bool`.
 
-§10.3 rates all anchor games one-sidedly. Draws against anchors are not exotic: the 48-game ladder above produced 12 draws in `ref_random`'s 24 games and 17 in `ref_depth2`'s. There is no representable outcome for them.
+§10.3 rates all anchor games one-sidedly. Draws against anchors are not exotic: the 48-game ladder above produced 12 draws in `ref_random`'s 24 games and 17 in `ref_depth3`'s. There is no representable outcome for them.
 
 This is the one case your mode brief says to raise loudly: **the code cannot be made to satisfy §10.3 as written**, because the pinned signature has no draw arm. Either §10.3 needs a draw rule and the signature changes, or the spec must say what happens (unrated? ignored?). Phase 3 will hit this on day one.
 
@@ -186,7 +186,7 @@ Missing against Interfaces Part 3 and client-engineer spec §3.4:
 
 [starter-kit/bot.py](starter-kit/bot.py#L112) — `time_budget_ms = clock.my_ms / 40`, then the only use is the `< 100` early-out at line 115. Depth is hard-coded to 2 regardless. The docstring's "Time management strategy" section describes a budget that does not exist.
 
-Correct today (depth 2 is fast enough — measured avg 16ms/move in the ladder), but the file is *the* file attendees read and modify. An attendee who raises the depth will find the "time management" does nothing, and will flag. That is the failure mode the client spec calls out as the most common.
+Correct today (depth 3 is fast enough — measured avg 16ms/move in the ladder), but the file is *the* file attendees read and modify. An attendee who raises the depth will find the "time management" does nothing, and will flag. That is the failure mode the client spec calls out as the most common.
 
 Also: [starter-kit/bot.py](starter-kit/bot.py#L1) is ~140 lines against the client spec's *"Must be under 50 lines including comments, readable on a projector."*
 
@@ -200,11 +200,11 @@ I ran an AST pass for assertion-free tests plus targeted mutation reasoning.
 
 ```
 $ .venv/bin/python (AST scan)
-  NO ASSERT: tests/arena/test_arena.py::test_ref_depth2_avoids_obvious_blunders
+  NO ASSERT: tests/arena/test_arena.py::test_ref_depth3_avoids_obvious_blunders
   NO ASSERT: tests/chess_core/test_matchmaker.py::test_seeded_different_seeds_different_pairings
 ```
 
-[tests/arena/test_arena.py](tests/arena/test_arena.py#L78) — `test_ref_depth2_avoids_obvious_blunders`. The innermost branch is a bare `pass` with a comment excusing it. **This is the test that was supposed to catch C1**, and its name says so. It is the single most expensive decorative test in the tree.
+[tests/arena/test_arena.py](tests/arena/test_arena.py#L78) — `test_ref_depth3_avoids_obvious_blunders`. The innermost branch is a bare `pass` with a comment excusing it. **This is the test that was supposed to catch C1**, and its name says so. It is the single most expensive decorative test in the tree.
 
 [tests/chess_core/test_matchmaker.py](tests/chess_core/test_matchmaker.py#L198) — computes two pairing lists and asserts nothing.
 
@@ -284,12 +284,12 @@ parse errors: []  moves read: 5
   ```
   Double-finalisation is prevented by DB CAS per AGENTS.md, so this is not live-breaking — but it is a silent overwrite in the one module whose job is encoding legal transitions.
 
-- **Anti-repetition logic in both reference bots is dead.** [ref_depth2.py](starter-kit/ref_bots/ref_depth2.py#L119) and [ref_greedy.py](starter-kit/ref_bots/ref_greedy.py#L40) call `board.is_repetition(2)`. Bots receive a board built from FEN (`arena.py` rebuilds it every ply), so `move_stack` is empty:
+- **Anti-repetition logic in both reference bots is dead.** [ref_depth3.py](starter-kit/ref_bots/ref_depth3.py#L119) and [ref_greedy.py](starter-kit/ref_bots/ref_greedy.py#L40) call `board.is_repetition(2)`. Bots receive a board built from FEN (`arena.py` rebuilds it every ply), so `move_stack` is empty:
   ```
   B. move_stack len from FEN-built board: 0
      is_repetition(2) after 1 push: False
   ```
-  The ±5000 / −10000 penalties never fire. The comments above them (*"Never repeat voluntarily; a winning side that does draws its own game"*) describe a mitigation that does not exist — and the ladder shows exactly the symptom they claim to prevent (17 of `ref_depth2`'s 24 games drawn). This will also mislead attendees who copy the pattern.
+  The ±5000 / −10000 penalties never fire. The comments above them (*"Never repeat voluntarily; a winning side that does draws its own game"*) describe a mitigation that does not exist — and the ladder shows exactly the symptom they claim to prevent (17 of `ref_depth3`'s 24 games drawn). This will also mislead attendees who copy the pattern.
 
 - **Unit-suffix discipline is not met for four time fields/params.** `to_move_since_mono`, `turn_started_mono` ([types.py](chess_core/types.py#L97)), and the `now_mono`/`receive_mono` parameters carry `_mono`, not `_ns`/`_ms`. Role spec §8 acceptance criterion 6 says *"every time field/parameter has `_ns` or `_ms`"*; interfaces Part 1 says *"a field without a suffix is a bug"*. The code matches the pinned interfaces exactly, so **the code is conformant and the two documents contradict each other.** Worth one sentence in the interfaces doc rather than a rename.
   Relatedly, [test_types.py](tests/chess_core/test_types.py#L64) `test_clock_state_has_ns_suffix` reads two fields and checks neither the suffix nor the other six.
@@ -384,9 +384,9 @@ Not counted as gaps because they are clearly phase 3: `chess_client/client.py`, 
 
 ## Prioritised — what to change before this lands
 
-1. **C1** — `not board.turn` → `board.turn` at [ref_depth2.py](starter-kit/ref_bots/ref_depth2.py#L120). One token. Then re-run the ladder.
+1. **C1** — `not board.turn` → `board.turn` at [ref_depth3.py](starter-kit/ref_bots/ref_depth3.py#L120). One token. Then re-run the ladder.
 2. **C3** — check `move_result.is_terminal` at the point of application in [arena.py](starter-kit/arena.py#L295), before `ply` is compared to `PLY_CAP`, so the arena matches `transition_after_move`.
-3. **T1** — replace `test_ref_depth2_avoids_obvious_blunders` with the queen-hang position from C1. It fails on `a8fa86f` and passes after the fix. Delete or complete `test_seeded_different_seeds_different_pairings`.
+3. **T1** — replace `test_ref_depth3_avoids_obvious_blunders` with the queen-hang position from C1. It fails on `a8fa86f` and passes after the fix. Delete or complete `test_seeded_different_seeds_different_pairings`.
 4. **C2** — after 1–3, re-measure the ladder and either fix `ref_greedy`/the baseline until the spec's ordering holds, or change the spec. Record the actual command and seed next to the constants, per §10.3.
 5. **M1** — delete `random.seed(seed)` from [matchmaker.py](chess_core/matchmaker.py#L37). Decide separately whether `seed` leaves the pinned signature.
 6. **M4** — remove the unreachable `can_claim_threefold_repetition()` branch from [rules.py](chess_core/rules.py#L76), or give `validate_and_apply_move` the history it would need. Leaving it is a trap for server-engineer.

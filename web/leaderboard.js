@@ -47,7 +47,7 @@ class LeaderboardRail {
 
       const rating = document.createElement('span');
       rating.className = 'lb-rating';
-      rating.textContent = bot.is_provisional ? `${bot.rating}?` : String(bot.rating);
+      rating.textContent = String(bot.rating);
 
       const record = document.createElement('span');
       record.className = 'lb-record';

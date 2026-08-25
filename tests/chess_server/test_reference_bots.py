@@ -5,7 +5,7 @@ import pytest
 from chess_core import RATED_TIME_CONTROL_NS, ClockView, ns_to_ms
 from chess_server.engine.reference_bots import (
     ANCHORS,
-    RefDepth2Bot,
+    Refdepth3Bot,
     RefGreedyBot,
     RefRandomBot,
     seed_anchors,
@@ -29,7 +29,7 @@ def clock_view() -> ClockView:
     )
 
 
-ALL_BOTS = [RefRandomBot, RefGreedyBot, RefDepth2Bot]
+ALL_BOTS = [RefRandomBot, RefGreedyBot, Refdepth3Bot]
 
 
 @pytest.mark.parametrize("bot_class", ALL_BOTS)
@@ -54,22 +54,22 @@ def test_ref_greedy_takes_a_free_queen():
     assert RefGreedyBot().choose_move(board, clock_view()) == chess.Move.from_uci("e4d5")
 
 
-def test_ref_depth2_finds_mate_in_one():
+def test_ref_depth3_finds_mate_in_one():
     board = chess.Board(MATE_IN_ONE)
-    move = RefDepth2Bot().choose_move(board, clock_view())
+    move = Refdepth3Bot().choose_move(board, clock_view())
     board.push(move)
     assert board.is_checkmate()
 
 
 # White queen on d5 is defended by nothing; Black's c6 pawn recaptures a queen that
-# grabs on d5. Greedy sees only the capture; depth 2 sees the reply.
+# grabs on d5. Greedy sees only the capture; depth 3 sees the reply.
 POISONED_PAWN = "4k3/8/2p5/3p4/8/8/8/3QK3 w - - 0 1"
 
 
-def test_ref_depth2_declines_material_ref_greedy_hangs():
+def test_ref_depth3_declines_material_ref_greedy_hangs():
     board = chess.Board(POISONED_PAWN)
     assert RefGreedyBot().choose_move(board, clock_view()) == chess.Move.from_uci("d1d5")
-    assert RefDepth2Bot().choose_move(board, clock_view()) != chess.Move.from_uci("d1d5")
+    assert Refdepth3Bot().choose_move(board, clock_view()) != chess.Move.from_uci("d1d5")
 
 
 async def test_seeding_is_idempotent_and_never_overwrites_a_rating(store):
@@ -91,7 +91,7 @@ async def test_seeded_anchors_carry_the_anchor_columns(store):
     await seed_anchors(store.writer, store.executor)
 
     anchors = await bots.list_anchors()
-    assert [a.name for a in anchors] == ["ref-random", "ref-greedy", "ref-depth2"]
+    assert [a.name for a in anchors] == ["ref-random", "ref-greedy", "ref-depth3"]
     for anchor in anchors:
         assert anchor.role == "anchor"
         assert anchor.is_anchor == 1

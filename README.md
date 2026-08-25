@@ -18,7 +18,7 @@ python3 -m venv .venv
 Then start it:
 
 ```
-JOIN_CODE=workshop2026 ADMIN_TOKEN=change-me .venv/bin/python -m chess_server --port 8000
+JOIN_CODE=workshop2026 ADMIN_TOKEN=change-me .venv/bin/python -m chess_server --port 8004
 ```
 
 `JOIN_CODE` is what you write on the whiteboard. `ADMIN_TOKEN` is yours alone.
@@ -28,13 +28,13 @@ To let attendees on the same network reach you, bind to all interfaces and give
 them your machine's IP address:
 
 ```
-JOIN_CODE=workshop2026 ADMIN_TOKEN=change-me .venv/bin/python -m chess_server --host 0.0.0.0 --port 8000
+JOIN_CODE=workshop2026 ADMIN_TOKEN=change-me .venv/bin/python -m chess_server --host 0.0.0.0 --port 8004
 ```
 
 ## Put it on the projector
 
 ```
-http://localhost:8000/dashboard/
+http://localhost:8004/dashboard/
 ```
 
 Four live boards plus the leaderboard. Leave it open — it updates itself.
@@ -54,7 +54,7 @@ on the next start.
 ## Check it is alive
 
 ```
-curl http://localhost:8000/health
+curl http://localhost:8004/health
 ```
 
 Returns JSON. `"db_writable": true` and a small `last_tick_age_ms` mean it is

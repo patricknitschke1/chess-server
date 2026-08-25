@@ -626,7 +626,7 @@ For every game with `status IN ('pending','active')` whose side to move is a bot
 
 If `choose_move` raises, that is a bug in our own code rather than an attendee's: log at ERROR with the game id and the FEN, `ROLLBACK TO` the savepoint, and continue. The rollback also undoes the delivery, so the game sits undelivered and step 4 abandons it within `DELIVERY_GRACE_NS` rather than wedging for the afternoon.
 
-This is the one place trusted in-process code plays a game, and it is why `reference_bots.py` is the single exception to "no untrusted code runs on the server". `RefRandomBot`, `RefGreedyBot` and `RefDepth2Bot` are seeded at startup with `role='anchor'`, `is_anchor=1` and fixed ratings. **Those ratings are provisional placeholders, not measurements**; calibration is deferred (design §21) and nothing here depends on them being right.
+This is the one place trusted in-process code plays a game, and it is why `reference_bots.py` is the single exception to "no untrusted code runs on the server". `RefRandomBot`, `RefGreedyBot` and `Refdepth3Bot` are seeded at startup with `role='anchor'`, `is_anchor=1` and fixed ratings. **Those ratings are provisional placeholders, not measurements**; calibration is deferred (design §21) and nothing here depends on them being right.
 
 ### 7.4 Step 4 — delivery grace
 

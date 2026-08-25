@@ -136,8 +136,8 @@ def minimax(board: chess.Board, depth: int, alpha: float, beta: float, maximizin
     return best
 
 
-class RefDepth2Bot:
-    """Depth-2 alpha-beta over a fixed White-perspective evaluation. Provisional
+class Refdepth3Bot:
+    """Depth-3 alpha-beta over a fixed White-perspective evaluation. Provisional
     rating 1200 — a placeholder, not a measurement (design §21)."""
 
     def choose_move(self, board: chess.Board, clock: ClockView) -> chess.Move:
@@ -148,7 +148,7 @@ class RefDepth2Bot:
             board.push(move)
             # board.turn is now the *opponent*; maximising is true exactly when
             # White is on move, because the evaluation never flips sign.
-            score = minimax(board, 1, float("-inf"), float("inf"), board.turn == chess.WHITE)
+            score = minimax(board, 2, float("-inf"), float("inf"), board.turn == chess.WHITE)
             board.pop()
             if (score > best_score) if maximiser else (score < best_score):
                 best_score = score
@@ -159,7 +159,7 @@ class RefDepth2Bot:
 ANCHORS: tuple[tuple[str, ReferenceBot, int], ...] = (
     ("ref-random", RefRandomBot(), 800),
     ("ref-greedy", RefGreedyBot(), 1000),
-    ("ref-depth2", RefDepth2Bot(), 1200),
+    ("ref-depth3", Refdepth3Bot(), 1200),
 )
 
 _BY_NAME = {name: bot for name, bot, _ in ANCHORS}
@@ -169,7 +169,7 @@ _BY_NAME = {name: bot for name, bot, _ in ANCHORS}
 ANCHOR_DISPLAY_NAMES = {
     "ref-random": "Fool's Gambit",
     "ref-greedy": "King's Gambit",
-    "ref-depth2": "Queen's Gambit",
+    "ref-depth3": "Queen's Gambit",
 }
 
 

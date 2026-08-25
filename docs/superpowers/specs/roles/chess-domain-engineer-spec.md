@@ -288,7 +288,7 @@ For competitor-vs-competitor games:
 
 ### One-sided anchor exception (elo.py)
 
-Games against anchors (`ref-random`, `ref-greedy`, `ref-depth2`) are rated **one-sidedly**: competitor moves, anchor does not.
+Games against anchors (`ref-random`, `ref-greedy`, `ref-depth3`) are rated **one-sidedly**: competitor moves, anchor does not.
 
 **This is a net injection of points per game**, but the injection shrinks toward zero as the competitor's rating approaches the anchor's. Combined with §9.3's ±400 gate and anchors only being offered when nobody else is free, total injection over a workshop day is small and self-limiting. It is not zero; the leaderboard is anchored rather than pure-zero-sum by design.
 

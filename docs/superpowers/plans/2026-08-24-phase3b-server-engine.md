@@ -40,7 +40,7 @@ chess_server/engine/games.py           create/finalise/forfeit/abort, inner + ou
 chess_server/engine/rating.py          the §6.6 derivation
 chess_server/engine/runner.py          deliver_position_locked, apply_move_locked, inner + outer
 chess_server/engine/pool.py            PoolEntry snapshot, anchor offer selection
-chess_server/engine/reference_bots.py  RefRandom / RefGreedy / RefDepth2 + seeding
+chess_server/engine/reference_bots.py  RefRandom / RefGreedy / Refdepth3 + seeding
 chess_server/engine/ticker.py          _tick_once, the eight steps, run_ticker, metrics
 chess_server/engine/supervisor.py      the 5 s warning, the 15 s cancel-and-restart, db_writable
 tests/chess_server/...                 one module per task
@@ -300,13 +300,13 @@ Build the `MoveResult` from `detect_termination`'s answer, **not** from `validat
 
 **Files:** `chess_server/engine/reference_bots.py`, `tests/chess_server/test_reference_bots.py`
 
-The single exception to "no untrusted code runs on the server" (design §9.3) — because we wrote it. Three bots with the signature `choose_move(board: chess.Board, clock: ClockView) -> chess.Move`, using `chess_core.types.ClockView`. **Do not import from `starter-kit/`**: it is not an installed package and the server must not depend on attendee-facing code. Port the logic — `ref_depth2`'s fixed-perspective negamax is the corrected version and the sign convention is load-bearing (a perspective keyed on `board.turn` is wrong at terminal nodes, which return before the flip).
+The single exception to "no untrusted code runs on the server" (design §9.3) — because we wrote it. Three bots with the signature `choose_move(board: chess.Board, clock: ClockView) -> chess.Move`, using `chess_core.types.ClockView`. **Do not import from `starter-kit/`**: it is not an installed package and the server must not depend on attendee-facing code. Port the logic — `ref_depth3`'s fixed-perspective negamax is the corrected version and the sign convention is load-bearing (a perspective keyed on `board.turn` is wrong at terminal nodes, which return before the flip).
 
 | name | class | rating | source |
 |---|---|---|---|
 | `ref-random` | `RefRandomBot` | 800 | `starter-kit/ref_bots/ref_random.py` |
 | `ref-greedy` | `RefGreedyBot` | 1000 | `starter-kit/ref_bots/ref_greedy.py` |
-| `ref-depth2` | `RefDepth2Bot` | 1200 | `starter-kit/ref_bots/ref_depth2.py` |
+| `ref-depth3` | `Refdepth3Bot` | 1200 | `starter-kit/ref_bots/ref_depth3.py` |
 
 Every rating is a **placeholder, not a measurement**; calibration is deferred (design §21) and the docstrings must say so.
 
@@ -314,7 +314,7 @@ Every rating is a **placeholder, not a measurement**; calibration is deferred (d
 
 **Tests first:**
 1. `ref-random` seeded with a fixed `random.Random` is reproducible, and every bot returns a **legal** move on: the start position, a position with exactly one legal move, and a position where the only legal moves are captures.
-2. `ref-greedy` takes a free queen; `ref-depth2` finds a mate in one from a crafted FEN and does **not** hang material to a one-move recapture that `ref-greedy` falls for. (Do not test perspective by mirroring the board — tie-breaks are not mirror-invariant and that produced 23/66 false "asymmetries" on correct code.)
+2. `ref-greedy` takes a free queen; `ref-depth3` finds a mate in one from a crafted FEN and does **not** hang material to a one-move recapture that `ref-greedy` falls for. (Do not test perspective by mirroring the board — tie-breaks are not mirror-invariant and that produced 23/66 false "asymmetries" on correct code.)
 3. Seeding is idempotent: run it twice, assert three anchors, and assert a rating manually changed between runs is **not** overwritten.
 4. Seeded anchors have `role='anchor'`, `is_anchor=1`, `last_poll_mono IS NULL`, and are absent from `BotRepo.list_leaderboard()`.
 5. No anchor's `token_hash` matches the sha256 of any string the test can construct — assert only that the three hashes are distinct and non-empty, and that no plaintext token is returned by the seeding API (it returns nothing).

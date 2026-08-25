@@ -1,4 +1,4 @@
-"""Minimax depth-2 bot — strong reference opponent, rating ~1200."""
+"""Minimax depth-3 bot — strong reference opponent, rating ~1200."""
 import chess
 from chess_client import ClockView
 
@@ -97,7 +97,7 @@ def minimax(board: chess.Board, depth: int, alpha: int, beta: int, maximizing: b
 
 
 def choose_move(board: chess.Board, clock: ClockView) -> chess.Move:
-    """Choose best move via minimax search to depth 2.
+    """Choose best move via minimax search to depth 3.
     
     Provisional rating: 1200 — a placeholder, NOT a measurement. Calibration is deferred (design §21).
     
@@ -109,7 +109,7 @@ def choose_move(board: chess.Board, clock: ClockView) -> chess.Move:
         clock: Time control information
         
     Returns:
-        Best move according to depth-2 minimax evaluation
+        Best move according to depth-3 minimax evaluation
     """
     best_move = None
     best_score = float('-inf') if board.turn == chess.WHITE else float('inf')

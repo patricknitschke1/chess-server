@@ -25,7 +25,7 @@ You get a table of wins, losses, draws, average time per move, and how often
 each bot flagged or played an illegal move.
 
 Three opponents to try, weakest first: `ref_bots/ref_random.py`,
-`ref_bots/ref_greedy.py`, `ref_bots/ref_depth2.py`.
+`ref_bots/ref_greedy.py`, `ref_bots/ref_depth3.py`.
 
 Beat `ref_greedy` consistently and you are ready to go live.
 
@@ -34,8 +34,8 @@ Beat `ref_greedy` consistently and you are ready to go live.
 Register once. Ask the workshop host for the join code and the server address.
 
 ```
-.venv/bin/python run.py register --name Sirius --owner "ada lovelace" \
-    --join-code workshop2026 --server http://localhost:8000
+.venv/bin/python run.py register --name "Mr MaC" --owner "MaC Group 21" \
+    --join-code workshop2026 --server http://localhost:8004
 ```
 
 That saves your bot's token to `.env` next to `bot.py`. **The token is your

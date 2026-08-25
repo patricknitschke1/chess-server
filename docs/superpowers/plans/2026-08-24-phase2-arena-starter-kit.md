@@ -13,12 +13,12 @@
 ## File Structure
 
 **Create:**
-- `starter-kit/bot.py` — Baseline bot attendees edit (material-counting minimax depth 2)
+- `starter-kit/bot.py` — Baseline bot attendees edit (material-counting minimax depth 3)
 - `starter-kit/ref_bots/` — Reference bot implementations for local arena
   - `ref_bots/__init__.py`
   - `ref_bots/ref_random.py`
   - `ref_bots/ref_greedy.py`
-  - `ref_bots/ref_depth2.py`
+  - `ref_bots/ref_depth3.py`
 - `starter-kit/arena.py` — Local competition runner
 - `starter-kit/requirements.txt` — Dependencies (python-chess)
 - `tests/arena/test_arena.py` — Arena tests
@@ -317,48 +317,48 @@ git commit -m "feat: add ref_greedy reference bot"
 
 ---
 
-### Task 4: Reference Bot — Depth-2 Minimax
+### Task 4: Reference Bot — depth-3 Minimax
 
 **Files:**
-- Create: `starter-kit/ref_bots/ref_depth2.py`
+- Create: `starter-kit/ref_bots/ref_depth3.py`
 - Modify: `tests/arena/test_arena.py`
 
-- [ ] **Step 1: Write failing test for ref_depth2**
+- [ ] **Step 1: Write failing test for ref_depth3**
 
 ```python
 # tests/arena/test_arena.py (add to existing file)
-from ref_bots.ref_depth2 import choose_move as ref_depth2_choose_move
+from ref_bots.ref_depth3 import choose_move as ref_depth3_choose_move
 
 
-def test_ref_depth2_sees_mate_in_one():
-    """ref_depth2 finds mate in one."""
+def test_ref_depth3_sees_mate_in_one():
+    """ref_depth3 finds mate in one."""
     # Scholar's mate position - white to move, Qxf7#
     board = chess.Board("r1bqkb1r/pppp1Qpp/2n2n2/4p3/2B1P3/8/PPPP1PPP/RNB1K1NR b KQkq - 0 4")
     board = board.mirror()  # Flip so we're finding the mate for white
     clock = ClockView(my_ms=180000, opponent_ms=180000, increment_ms=2000, ply=7)
     
-    move = ref_depth2_choose_move(board, clock)
+    move = ref_depth3_choose_move(board, clock)
     board.push(move)
     assert board.is_checkmate()
 
 
-def test_ref_depth2_returns_legal_move():
-    """ref_depth2 returns a legal move."""
+def test_ref_depth3_returns_legal_move():
+    """ref_depth3 returns a legal move."""
     board = chess.Board()
     clock = ClockView(my_ms=180000, opponent_ms=180000, increment_ms=2000, ply=0)
-    move = ref_depth2_choose_move(board, clock)
+    move = ref_depth3_choose_move(board, clock)
     assert move in board.legal_moves
 
 
-def test_ref_depth2_avoids_obvious_blunders():
-    """ref_depth2 doesn't hang pieces in one move."""
+def test_ref_depth3_avoids_obvious_blunders():
+    """ref_depth3 doesn't hang pieces in one move."""
     # Position where moving queen to dangerous square loses it
     board = chess.Board("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1")
     clock = ClockView(my_ms=180000, opponent_ms=180000, increment_ms=2000, ply=0)
     
     # Run several times - should never hang queen immediately
     for _ in range(3):
-        move = ref_depth2_choose_move(board, clock)
+        move = ref_depth3_choose_move(board, clock)
         # Make move, check opponent can't capture queen for free
         test_board = board.copy()
         test_board.push(move)
@@ -369,21 +369,21 @@ def test_ref_depth2_avoids_obvious_blunders():
                 if test_board.is_capture(opp_move):
                     captured = test_board.piece_at(opp_move.to_square)
                     if captured and captured.piece_type == chess.QUEEN:
-                        # Opponent can capture queen - this should be rare with depth 2
+                        # Opponent can capture queen - this should be rare with depth 3
                         # (might happen if it's a trade)
                         pass
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `pytest tests/arena/test_arena.py::test_ref_depth2_sees_mate_in_one -v`
-Expected: FAIL with "No module named 'ref_bots.ref_depth2'"
+Run: `pytest tests/arena/test_arena.py::test_ref_depth3_sees_mate_in_one -v`
+Expected: FAIL with "No module named 'ref_bots.ref_depth3'"
 
-- [ ] **Step 3: Write minimal ref_depth2 implementation**
+- [ ] **Step 3: Write minimal ref_depth3 implementation**
 
 ```python
-# starter-kit/ref_bots/ref_depth2.py
-"""Minimax depth-2 bot — strong reference opponent, rating ~1200."""
+# starter-kit/ref_bots/ref_depth3.py
+"""Minimax depth-3 bot — strong reference opponent, rating ~1200."""
 import chess
 from chess_client.types import ClockView
 
@@ -446,7 +446,7 @@ def minimax(board: chess.Board, depth: int, alpha: int, beta: int, maximizing: b
 
 
 def choose_move(board: chess.Board, clock: ClockView) -> chess.Move:
-    """Choose best move via minimax search to depth 2.
+    """Choose best move via minimax search to depth 3.
     
     Calibrated rating: 1200 (measured from seeded arena ladder)
     """
@@ -478,8 +478,8 @@ Expected: PASS (7 tests)
 - [ ] **Step 5: Commit**
 
 ```bash
-git add starter-kit/ref_bots/ref_depth2.py tests/arena/test_arena.py
-git commit -m "feat: add ref_depth2 minimax reference bot"
+git add starter-kit/ref_bots/ref_depth3.py tests/arena/test_arena.py
+git commit -m "feat: add ref_depth3 minimax reference bot"
 ```
 
 ---
@@ -547,7 +547,7 @@ Expected: FAIL with "No module named 'bot'"
 # starter-kit/bot.py
 """Baseline chess bot - starting point for workshop attendees.
 
-This bot uses material-counting minimax to depth 2 with time management.
+This bot uses material-counting minimax to depth 3 with time management.
 It beats ref_random reliably and loses to ref_greedy reliably.
 Most importantly: it does NOT flag at 3+2 time control.
 """
@@ -647,7 +647,7 @@ def choose_move(board: chess.Board, clock: ClockView) -> chess.Move:
         # Just pick first legal move when < 100ms budget
         return list(board.legal_moves)[0]
     
-    # Search depth 2 (our move + opponent's response)
+    # Search depth 3 (our move + opponent's response)
     best_move = None
     best_score = float('-inf')
     
@@ -2009,16 +2009,16 @@ def test_arena_opening_randomization_prevents_replays():
     
     # Load two deterministic bots
     ref_greedy = load_bot_module("starter-kit/ref_bots/ref_greedy.py")
-    ref_depth2 = load_bot_module("starter-kit/ref_bots/ref_depth2.py")
+    ref_depth3 = load_bot_module("starter-kit/ref_bots/ref_depth3.py")
     
     # Run with seed 1
     random.seed(1)
     opening1 = select_opening()
     result1 = run_single_game(
         white_bot=ref_greedy.choose_move,
-        black_bot=ref_depth2.choose_move,
+        black_bot=ref_depth3.choose_move,
         white_name="greedy",
-        black_name="depth2",
+        black_name="depth3",
         time_control_ns=RATED_TIME_CONTROL_NS,
         increment_ns=RATED_INCREMENT_NS,
         opening_fen=opening1,
@@ -2030,9 +2030,9 @@ def test_arena_opening_randomization_prevents_replays():
     opening2 = select_opening()
     result2 = run_single_game(
         white_bot=ref_greedy.choose_move,
-        black_bot=ref_depth2.choose_move,
+        black_bot=ref_depth3.choose_move,
         white_name="greedy",
-        black_name="depth2",
+        black_name="depth3",
         time_control_ns=RATED_TIME_CONTROL_NS,
         increment_ns=RATED_INCREMENT_NS,
         opening_fen=opening2,
@@ -2121,7 +2121,7 @@ git commit -m "test: verify opening randomization prevents game replays"
 - ✓ `choose_move(board: chess.Board, clock: ClockView)` signature (§3.1, Interfaces Part 3)
 - ✓ ClockView with `my_ms`, no color indexing (§3.1, §4.1)
 - ✓ Baseline bot with time management that doesn't flag at 3+2 (§3.1, §4.9)
-- ✓ Reference bots: ref_random, ref_greedy, ref_depth2 (§3.4, design §10.3)
+- ✓ Reference bots: ref_random, ref_greedy, ref_depth3 (§3.4, design §10.3)
 - ✓ Opening randomization, seeded (§3.4, §4.6, design §17)
 - ✓ Arena uses chess_core for clock and rules (§4.7, §5 seams from chess_core)
 - ✓ Mean and p95 move time statistics (§3.4, §6 arena result types)

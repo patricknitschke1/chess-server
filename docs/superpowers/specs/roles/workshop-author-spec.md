@@ -117,7 +117,7 @@ Narrative: 09:00 to end-of-day, which artefact of mine is load-bearing at each s
 2. **Local benchmarking before deploying** — `python arena.py --bots bot.py ref-greedy.py --games 50`. Explain why 50 games (sample size), what the output means (ELO delta, flag count, illegal attempts), and when to trust it (ref-greedy beaten → deploy; otherwise, iterate).
 3. **Deploying** — `python run.py` resumes with the new code. Leaderboard updates within a game or two.
 4. **Reading the server result** — losses show on the leaderboard, `analyze_game` via MCP shows timing and strikes.
-5. **The ref-* ladder as a progress bar** — ref-random (1000) → ref-greedy (1000) → ref-depth2 (1400). Beating the next rung means your bot improved.
+5. **The ref-* ladder as a progress bar** — ref-random (1000) → ref-greedy (1000) → ref-depth3 (1400). Beating the next rung means your bot improved.
 
 **Seam consumed:** `client-engineer` delivers `arena.py --bots ... --games N` and the `ClockView` type. I document those exact interfaces.
 
@@ -179,7 +179,7 @@ def evaluate_position(board):
 Include the mirror indexing for Black — an attendee will otherwise index the table backwards and debug for an hour.
 
 ##### 3. Minimax → Alpha-Beta → Move Ordering
-- **Minimax (2-ply example):** Show the recursion: `max` at my turn, `min` at opponent's. "Depth 2 means you see your move and their response."
+- **Minimax (2-ply example):** Show the recursion: `max` at my turn, `min` at opponent's. "depth 3 means you see your move and their response."
 - **Alpha-Beta pruning:** "Once you've found a move that scores +3, you can skip branches that will score worse than +3. This cuts the search tree by ~half without changing the result."
 - **Move Ordering:** "Try captures first (`board.is_capture(move)`), then checks, then others. Alpha-beta prunes more when good moves are tried early."
 
@@ -264,7 +264,7 @@ Every claim is codeable. If I write "prioritize king safety", I must immediately
 
 **Required content:**
 1. **Sample size matters** — 10 games is noise; 50 is a weak signal; 100 is trustable. Show the ELO confidence interval widening as sample size shrinks (table or formula).
-2. **The ref-* ladder** — ref-random (1000 ELO), ref-greedy (1000 ELO, material-only), ref-depth2 (1400 ELO, 2-ply search). Beating ref-greedy consistently (60%+ win rate over 50 games) means your evaluation works; beating ref-depth2 means your search is strong.
+2. **The ref-* ladder** — ref-random (1000 ELO), ref-greedy (1000 ELO, material-only), ref-depth3 (1400 ELO, 2-ply search). Beating ref-greedy consistently (60%+ win rate over 50 games) means your evaluation works; beating ref-depth3 means your search is strong.
 3. **Reading the stats** — flag count is the first thing to check. If `flags: 8` and `wins: 2`, time management is broken, not the evaluation.
 4. **The bar for deploying** — new version beats old version in ≥60 of 100 games, **and flags ≤2 times per 100 games**, or do not deploy. A version that wins more but flags more is not better.
 5. **Posting local results to the dashboard (opt-in)** — `python arena.py --bots bot.py baseline.py --games 100 --report` posts a summary to the server, visible in your My Bot panel on the dashboard with an amber "Local · self-reported" label. Explain why local numbers are unverified: they never affect the rated leaderboard, and you can report "1000 wins" against a bot that doesn't exist. Local stats are for **your** tuning loop, not for competitive claims. The `--report` flag requires a bot token (from `run.py --register`) but the arena still works fully offline if the server is down or the POST fails.
@@ -451,7 +451,7 @@ If I show a code block, it must be syntactically valid Python that an attendee c
 ### `benchmarking-a-bot.md`
 - [ ] Sample size guidance is quantified (10 games = noise, 50 = weak signal, 100 = trustable)
 - [ ] Flag count is called out as the first diagnostic
-- [ ] The ref-* ladder (ref-random, ref-greedy, ref-depth2) is a progress bar, not a mention
+- [ ] The ref-* ladder (ref-random, ref-greedy, ref-depth3) is a progress bar, not a mention
 
 ### `diagnosing-bot-losses.md`
 - [ ] The three failure patterns (flagging, illegal moves, shallow blunders) are recognisable from `analyze_game` output

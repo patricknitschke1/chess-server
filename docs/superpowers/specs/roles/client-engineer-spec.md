@@ -128,7 +128,7 @@ def choose_move(board: chess.Board, clock: ClockView) -> chess.Move:
 - Must be under 50 lines including comments, readable on a projector.
 - ~~Should beat `ref-random` reliably and lose to `ref-greedy` reliably~~ — **deferred, design §21.** No requirement about which bot beats which is in scope. Do not tune any bot's strength to satisfy one.
 
-**Recommendation:** A simple material-counting minimax to depth 2 with a time-per-move budget of `clock.my_ms / 40` (assumes ~40 moves remaining). This is safe at 3+2, demonstrates one technique, and gives newcomers a 60-second improvement path (add piece-square tables).
+**Recommendation:** A simple material-counting minimax to depth 3 with a time-per-move budget of `clock.my_ms / 40` (assumes ~40 moves remaining). This is safe at 3+2, demonstrates one technique, and gives newcomers a 60-second improvement path (add piece-square tables).
 
 ### 3.2 `chess_client/` — The SDK
 
@@ -874,10 +874,10 @@ This is the acceptance bar: if the shipped baseline fails this test, it is not s
 **Options:**
 
 1. **Depth 1 (immediate captures):** Safest time-wise, very weak.
-2. **Depth 2 with material-only eval:** Safe at 3+2 (~100ms/move). (Its relative strength against the reference bots is deferred, design §21.)
+2. **depth 3 with material-only eval:** Safe at 3+2 (~100ms/move). (Its relative strength against the reference bots is deferred, design §21.)
 3. **Depth 3 with alpha-beta and piece-square tables:** Stronger, but risks flagging if implemented naively.
 
-**Recommendation:** **Option 2.** Depth 2 is the sweet spot: time management is obvious (budget = `clock.my_ms / 40`) and the implementation fits in 50 lines. Depth 3 requires alpha-beta to be safe, which is too much code for a baseline. The original rationale also cited attendees beating random and losing to greedy — that claim is **deferred, design §21**, and is no longer a reason to pick or reject a depth.
+**Recommendation:** **Option 2.** depth 3 is the sweet spot: time management is obvious (budget = `clock.my_ms / 40`) and the implementation fits in 50 lines. Depth 3 requires alpha-beta to be safe, which is too much code for a baseline. The original rationale also cited attendees beating random and losing to greedy — that claim is **deferred, design §21**, and is no longer a reason to pick or reject a depth.
 
 **Affects:** `starter-kit/bot.py`
 
@@ -957,7 +957,7 @@ This is the acceptance bar: if the shipped baseline fails this test, it is not s
 - `choose_move(board: chess.Board, clock: ClockView) -> chess.Move` — attendees and workshop-author both depend on this
 - Implementation decisions (6 items, all non-blocking with recommendations):**
 1. Opening book composition (recommend: mainline only, §10.1)
-2. Shipped baseline bot depth (recommend: depth 2 material-only, §10.2)
+2. Shipped baseline bot depth (recommend: depth 3 material-only, §10.2)
 3. Re-poll interval when no game (recommend: immediate, long-poll provides backpressure, §10.3)
 4. Handling `choose_move` exceptions (recommend: resign immediately, log traceback, §10.4)
 5. `client_reported_ms` measurement (recommend: wall time, matches server charging, §10.5)

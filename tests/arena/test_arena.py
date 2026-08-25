@@ -5,7 +5,7 @@ from pathlib import Path
 from chess_client import ClockView
 from ref_bots.ref_random import choose_move as ref_random_choose_move
 from ref_bots.ref_greedy import choose_move as ref_greedy_choose_move
-from ref_bots.ref_depth2 import choose_move as ref_depth2_choose_move
+from ref_bots.ref_depth3 import choose_move as ref_depth3_choose_move
 
 
 def test_ref_random_returns_legal_move():
@@ -55,31 +55,31 @@ def test_ref_greedy_returns_legal_move():
     assert move in board.legal_moves
 
 
-def test_ref_depth2_sees_mate_in_one():
-    """ref_depth2 finds mate in one."""
+def test_ref_depth3_sees_mate_in_one():
+    """ref_depth3 finds mate in one."""
     # Position before scholar's mate - white can play Qxf7#
     # After 1.e4 e5 2.Bc4 Nc6 3.Qh5 Nf6?
     board = chess.Board("r1bqkb1r/pppp1ppp/2n2n2/4p2Q/2B1P3/8/PPPP1PPP/RNB1K1NR w KQkq - 4 4")
     clock = ClockView(my_ms=180000, opponent_ms=180000, increment_ms=2000, ply=7)
     
-    move = ref_depth2_choose_move(board, clock)
+    move = ref_depth3_choose_move(board, clock)
     board.push(move)
     assert board.is_checkmate()
 
 
-def test_ref_depth2_returns_legal_move():
-    """ref_depth2 returns a legal move."""
+def test_ref_depth3_returns_legal_move():
+    """ref_depth3 returns a legal move."""
     board = chess.Board()
     clock = ClockView(my_ms=180000, opponent_ms=180000, increment_ms=2000, ply=0)
-    move = ref_depth2_choose_move(board, clock)
+    move = ref_depth3_choose_move(board, clock)
     assert move in board.legal_moves
 
 
-def test_ref_depth2_avoids_obvious_blunders():
-    """ref_depth2 must not give its queen away for a pawn.
+def test_ref_depth3_avoids_obvious_blunders():
+    """ref_depth3 must not give its queen away for a pawn.
 
     K+Q vs K+P, and the d7 pawn is defended by the king. Taking it is the only
-    move that loses material, and a depth-2 search sees the recapture — unless
+    move that loses material, and a depth-3 search sees the recapture — unless
     the min/max flag is inverted, in which case the opponent's reply is searched
     as if it helped us and the bot goes hunting for the biggest available
     blunder. It played Qxd7+ and lost the queen to Kxd7.
@@ -87,7 +87,7 @@ def test_ref_depth2_avoids_obvious_blunders():
     board = chess.Board("4k3/3p4/8/8/8/8/3Q4/4K3 w - - 0 1")
     clock = ClockView(my_ms=180000, opponent_ms=180000, increment_ms=2000, ply=0)
 
-    move = ref_depth2_choose_move(board, clock)
+    move = ref_depth3_choose_move(board, clock)
 
     board.push(move)
     hangs_queen = [
@@ -98,7 +98,7 @@ def test_ref_depth2_avoids_obvious_blunders():
         and captured.piece_type == chess.QUEEN
     ]
     assert not hangs_queen, (
-        f"ref_depth2 played {move.uci()}, losing the queen to {hangs_queen}"
+        f"ref_depth3 played {move.uci()}, losing the queen to {hangs_queen}"
     )
 
 

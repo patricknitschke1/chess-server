@@ -16,7 +16,7 @@ answered rather than forgotten.
 always false.
 
 For showing them: an attendee at 1150 learns more from seeing `ref-greedy 1000`
-and `ref-depth2 1200` on the same board than from a number in isolation. That is
+and `ref-depth3 1200` on the same board than from a number in isolation. That is
 what anchors are for.
 
 Against: they never move, and they push real attendees down a projector with
@@ -59,7 +59,7 @@ lowest game id, held 20s so the projector does not flip mid-move.
 
 ## 4. Anchor ratings are placeholders
 
-`ref-random 800`, `ref-greedy 1000`, `ref-depth2 1200` are **not measurements**.
+`ref-random 800`, `ref-greedy 1000`, `ref-depth3 1200` are **not measurements**.
 Design §10.3 originally required calibration from a seeded ladder and warned that
 guessed anchors "would bias every rating in the room" — they are currently
 guessed.

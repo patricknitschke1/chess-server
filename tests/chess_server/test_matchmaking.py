@@ -99,7 +99,7 @@ async def test_unpaired_ticks_is_cleared_when_a_bot_takes_a_seat(
 
 async def test_two_anchors_alone_never_pair(deps, games, seed_bots):
     await anchor(seed_bots, "ref-greedy", 1000)
-    await anchor(seed_bots, "ref-depth2", 1200)
+    await anchor(seed_bots, "ref-depth3", 1200)
     await tick(deps)
     assert await games.list_active_summaries() == []
 
