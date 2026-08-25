@@ -10,11 +10,13 @@ opening a board must never start one.
 from fastapi import APIRouter, Request, status
 from fastapi.responses import StreamingResponse
 
-from chess_core import STARTING_FEN
+from chess_core import STARTING_FEN, compute_turn_elapsed_ms
 
 from chess_server.api.errors import BOT_NOT_FOUND, GAME_NOT_FOUND, ApiError
 from chess_server.api.models import (
     PROVISIONAL_GAMES,
+    ActiveGameSummary,
+    DashboardStateResponse,
     GameDetailResponse,
     GameMoveEntry,
     GameMovesResponse,
@@ -29,8 +31,11 @@ from chess_server.store.repositories import (
     GameRepo,
     MoveRepo,
     RatingHistoryRepo,
+    clock_from_summary,
 )
 from chess_server.store.rows import BotRow, GameRow
+from chess_server.store.run import current_run_id
+from chess_server.store.txn import current_seq
 
 router = APIRouter()
 
@@ -95,6 +100,47 @@ async def leaderboard(request: Request) -> LeaderboardResponse:
     rows = await _bots(get_state(request)).list_leaderboard()
     return LeaderboardResponse(
         bots=[to_leaderboard_entry(bot) for bot in rows], total_bots=len(rows)
+    )
+
+
+@router.get("/state", response_model=DashboardStateResponse)
+async def dashboard_state(request: Request) -> DashboardStateResponse:
+    app_state = get_state(request)
+    summaries = await _games(app_state).list_active_summaries()
+    # After the summaries, never before: a client applying `id > event_id` would
+    # otherwise skip an event that landed between the two reads.
+    event_id = current_seq()
+
+    now_mono = app_state.now_mono()
+    featured_game_id = app_state.featured.current(summaries, now_mono)
+    app_state.hub.featured_game_id = featured_game_id
+
+    return DashboardStateResponse(
+        run_id=current_run_id(),
+        event_id=event_id,
+        active_games=[
+            ActiveGameSummary(
+                turn_elapsed_ms=compute_turn_elapsed_ms(
+                    clock_from_summary(row), now_mono
+                ),
+                is_featured=row["game_id"] == featured_game_id,
+                rated=bool(row["rated"]),
+                **{
+                    key: row[key]
+                    for key in (
+                        "game_id", "white_bot_id", "white_bot_name", "white_rating",
+                        "black_bot_id", "black_bot_name", "black_rating",
+                        "status", "fen", "to_move", "ply", "white_ms", "black_ms",
+                    )
+                },
+            )
+            for row in summaries
+        ],
+        leaderboard=[
+            to_leaderboard_entry(bot)
+            for bot in await _bots(app_state).list_leaderboard()
+        ],
+        featured_game_id=featured_game_id,
     )
 
 

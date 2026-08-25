@@ -49,6 +49,21 @@ def _clock_from_game(game: GameRow) -> ClockState:
     )
 
 
+def clock_from_summary(row: dict) -> ClockState:
+    """`_clock_from_game` for a `list_active_summaries` row, so /state can ask
+    chess_core for elapsed time without a second ms -> ns boundary in api/."""
+    return ClockState(
+        white_ns=ms_to_ns(row["white_ms"]),
+        black_ns=ms_to_ns(row["black_ms"]),
+        time_control_ns=ms_to_ns(row["time_control_ms"]),
+        increment_ns=ms_to_ns(row["increment_ms"]),
+        to_move=Color(row["to_move"]),
+        to_move_since_mono=row["to_move_since_mono"],
+        turn_started_mono=row["turn_started_mono"],
+        delivered_to_mover=row["delivered_to_mover"],
+    )
+
+
 def _clock_to_game_fields(clock: ClockState) -> dict:
     """The single ns -> ms boundary. Nothing else in chess_server/ calls ns_to_ms."""
     return {
@@ -225,6 +240,7 @@ _SUMMARY_SELECT = """
 SELECT g.id AS game_id, g.white_bot_id, g.black_bot_id, g.status, g.fen, g.to_move,
        g.ply, g.white_ms, g.black_ms, g.rated, g.turn_started_mono,
        g.to_move_since_mono, g.delivered_to_mover,
+       g.time_control_ms, g.increment_ms,
        w.name AS white_bot_name, w.rating AS white_rating,
        b.name AS black_bot_name, b.rating AS black_rating
   FROM games g

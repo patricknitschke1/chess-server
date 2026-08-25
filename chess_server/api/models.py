@@ -227,3 +227,30 @@ class RatingHistoryResponse(BaseModel):
     bot_id: int
     bot_name: str
     points: List[RatingPoint]
+
+
+class ActiveGameSummary(BaseModel):
+    game_id: int
+    white_bot_id: int
+    white_bot_name: str
+    white_rating: int
+    black_bot_id: int
+    black_bot_name: str
+    black_rating: int
+    status: str
+    fen: str
+    to_move: str
+    ply: int
+    white_ms: int
+    black_ms: int
+    turn_elapsed_ms: Optional[int]
+    is_featured: bool
+    rated: bool
+
+
+class DashboardStateResponse(BaseModel):
+    run_id: str
+    event_id: int
+    active_games: List[ActiveGameSummary]
+    leaderboard: List[LeaderboardEntry]
+    featured_game_id: Optional[int]
