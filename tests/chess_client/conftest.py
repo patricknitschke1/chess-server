@@ -13,7 +13,7 @@ from pathlib import Path
 import httpx
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "starter-kit"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "chess-bot-starter-kit"))
 
 from chess_core import RATED_INCREMENT_NS, RATED_TIME_CONTROL_NS  # noqa: E402
 from chess_server.api.app import create_app  # noqa: E402

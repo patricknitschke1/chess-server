@@ -718,7 +718,7 @@ def test_arena_replay_missing_file_errors_actionably(tmp_path, capsys):
     assert "--pgn" in capsys.readouterr().err
 
 
-STARTER_KIT = Path(__file__).resolve().parent.parent.parent / "starter-kit"
+STARTER_KIT = Path(__file__).resolve().parent.parent.parent / "chess-bot-starter-kit"
 
 
 def _run_arena(seed: int, pgn_path) -> str:

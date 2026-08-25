@@ -39,7 +39,7 @@ tests/chess_server/        including the concurrency and recovery integration te
 
 You do not implement chess rules, clock arithmetic, Elo, or pairing policy — you call `chess_core` for all of it. If you find yourself writing `if board.is_checkmate()`, stop: that belongs in `chess_core` and you are duplicating it.
 
-You do not touch `web/`, `mcp/`, or `starter-kit/`. They are your clients, and they bind to the wire contract, not to your internals.
+You do not touch `web/`, `mcp/`, or `chess-bot-starter-kit/`. They are your clients, and they bind to the wire contract, not to your internals.
 
 ## Definition of done
 

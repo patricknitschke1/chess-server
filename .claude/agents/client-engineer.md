@@ -16,11 +16,11 @@ Your design problem — an API a novice cannot misuse — is a different skill f
 ## You own
 
 ```
-starter-kit/bot.py            the ONLY file attendees edit
-starter-kit/chess_client/     SDK: register, long-poll, submit, retries, handoff
-starter-kit/run.py            entrypoint
-starter-kit/arena.py          offline local arena
-tests/arena/, starter-kit/tests/
+chess-bot-starter-kit/bot.py            the ONLY file attendees edit
+chess-bot-starter-kit/chess_client/     SDK: register, long-poll, submit, retries, handoff
+chess-bot-starter-kit/run.py            entrypoint
+chess-bot-starter-kit/arena.py          offline local arena
+tests/arena/, chess-bot-starter-kit/tests/
 ```
 
 ## Read before you write

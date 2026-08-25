@@ -40,7 +40,7 @@ tests/chess_core/         the matching tests
 
 ## Boundaries
 
-You do not touch `chess_server/`, `web/`, `starter-kit/`, or any file that opens a socket or a database. If your work seems to need one, the design is wrong — say so rather than reaching across.
+You do not touch `chess_server/`, `web/`, `chess-bot-starter-kit/`, or any file that opens a socket or a database. If your work seems to need one, the design is wrong — say so rather than reaching across.
 
 ## Definition of done
 

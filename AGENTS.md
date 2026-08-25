@@ -13,7 +13,7 @@ When a decision trades cleverness against clarity, choose clarity. This code get
 
 ## Current state
 
-`chess_core/`, `starter-kit/`, `chess_server/` and `web/` are built and green (703 tests). **The MVP is complete end to end:** an attendee registers with `starter-kit/run.py`, plays rated games, and the Big Screen dashboard at `/dashboard/` shows four live boards and the leaderboard.
+`chess_core/`, `chess-bot-starter-kit/`, `chess_server/` and `web/` are built and green (704 tests). **The MVP is complete end to end:** an attendee registers with `chess-bot-starter-kit/run.py`, plays rated games, and the Big Screen dashboard at `/dashboard/` shows four live boards and the leaderboard.
 
 Run the server with `JOIN_CODE=... ADMIN_TOKEN=... .venv/bin/python -m chess_server`. A clean checkout needs `.venv/bin/python -m pip install -e .` once — and note the editable-install finder does **not** self-update when a new top-level package appears, so re-run it before believing an `ImportError`.
 
@@ -34,14 +34,14 @@ Module boundaries — `chess_core` signatures, SSE events, bot/SDK surface, HTTP
 ## Architecture
 
 ```
-chess_core/      Pure logic. No I/O, no clock reads, no network.
-                 Shared by BOTH the server and the local arena.
-chess_server/    store/ engine/ api/ — SQLite, one background ticker, FastAPI
-web/             Dashboard. Plain HTML/CSS/JS, no build step.
-starter-kit/     What attendees clone. bot.py is the only file they edit.
+chess_server/                    store/ engine/ api/ — SQLite, one background ticker, FastAPI
+web/                             Dashboard. Plain HTML/CSS/JS, no build step.
+chess-bot-starter-kit/           What attendees clone — nothing else. bot.py is the only file they edit.
+chess-bot-starter-kit/chess_core/  Pure logic. No I/O, no clock reads, no network.
+                                  Shared by BOTH the server and the local arena.
 ```
 
-`chess_core` being shared is load-bearing: offline results must predict live server behaviour. Never fork the rules into a "simplified" local version.
+`chess_core` lives inside `chess-bot-starter-kit/` — that's what makes the kit clonable on its own, with nothing else from this repository. The root package depends on it at that path (see `pyproject.toml`); it is not copied or forked. `chess_core` being shared is load-bearing: offline results must predict live server behaviour. Never fork the rules into a "simplified" local version.
 
 ## Non-negotiable invariants
 
@@ -80,7 +80,7 @@ Verified the hard way; each has cost real time here.
 
 ## Skills and agents
 
-Build-time agents live in `.claude/agents/`; attendee-facing skills ship in `starter-kit/.claude/`. See §12 of the spec for the roster and who owns what.
+Build-time agents live in `.claude/agents/`; attendee-facing skills ship in `chess-bot-starter-kit/.claude/`. See §12 of the spec for the roster and who owns what.
 
 The split is deliberate and is itself workshop content:
 **subagents isolate noisy work; skills inject knowledge into work you are already doing.** If a tool's output is small enough to read inline, it does not need a subagent — fix the tool's output instead.

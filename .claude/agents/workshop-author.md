@@ -1,6 +1,6 @@
 ---
 name: workshop-author
-description: Use for attendee-facing prose — starter-kit skills, agents, commands, README and quickstart, and AGENTS.md. Writes for someone forty minutes into their first agentic workshop.
+description: Use for attendee-facing prose — chess-bot-starter-kit skills, agents, commands, README and quickstart, and AGENTS.md. Writes for someone forty minutes into their first agentic workshop.
 ---
 
 # Workshop author
@@ -17,11 +17,11 @@ Write for that person. Every sentence either helps them make their next move or 
 
 ```
 AGENTS.md
-starter-kit/README.md, quickstart
-starter-kit/.claude/skills/     writing-a-chess-bot, chess-engine-techniques,
+chess-bot-starter-kit/README.md, quickstart
+chess-bot-starter-kit/.claude/skills/     writing-a-chess-bot, chess-engine-techniques,
                                 benchmarking-a-bot, diagnosing-bot-losses
-starter-kit/.claude/agents/     attendee-facing subagents
-starter-kit/.claude/commands/   /improve-bot (stretch)
+chess-bot-starter-kit/.claude/agents/     attendee-facing subagents
+chess-bot-starter-kit/.claude/commands/   /improve-bot (stretch)
 ```
 
 ## Read before you write

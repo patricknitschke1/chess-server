@@ -4,26 +4,21 @@ You edit one file: `bot.py`. Nothing else.
 
 ## Setup
 
-Once, from the folder above this one (the repository root):
+Once, from this directory:
 
 ```
 python3 -m venv .venv
-.venv/bin/python -m pip install -e .
+.venv/bin/pip install -r requirements.txt
 ```
 
-Then come back here. Every command below is run from this directory, and uses
-`../.venv/bin/python` — the interpreter you just set up.
-
-```
-cd starter-kit
-```
+Every command below uses `.venv/bin/python` — the interpreter you just set up.
 
 ## 1. Play some games offline
 
 No server needed. This is how you test changes:
 
 ```
-../.venv/bin/python arena.py --bots bot.py ref_bots/ref_greedy.py --games 4 --seed 7
+.venv/bin/python arena.py --bots bot.py ref_bots/ref_greedy.py --games 4 --seed 7
 ```
 
 You get a table of wins, losses, draws, average time per move, and how often
@@ -39,7 +34,7 @@ Beat `ref_greedy` consistently and you are ready to go live.
 Register once. Ask the workshop host for the join code and the server address.
 
 ```
-../.venv/bin/python run.py register --name Sirius --owner "ada lovelace" \
+.venv/bin/python run.py register --name Sirius --owner "ada lovelace" \
     --join-code workshop2026 --server http://localhost:8000
 ```
 
@@ -50,7 +45,7 @@ never printed.
 Then play, as often as you like:
 
 ```
-../.venv/bin/python run.py play
+.venv/bin/python run.py play
 ```
 
 It loads the saved token, waits to be paired, and plays until you press Ctrl-C.
@@ -91,10 +86,9 @@ Change one thing, re-run the arena, keep it if the score went up.
 
 ## Common problems
 
-- **`ModuleNotFoundError: chess_client`** — you are in the wrong directory. Run
-  from the folder containing `bot.py`.
-- **`ModuleNotFoundError: chess_core`** — the setup step did not run. Go up one
-  folder and run `.venv/bin/python -m pip install -e .`.
+- **`ModuleNotFoundError: chess_client` or `chess_core`** — you are in the wrong
+  directory, or the setup step didn't run. Run from the folder containing
+  `bot.py`, and `.venv/bin/pip install -r requirements.txt` if you haven't.
 - **`Could not reach the arena server`** — check `--server` with the workshop
   host, and that they are still running.
 - **`No saved bot token`** — you have not registered yet, or `.env` was

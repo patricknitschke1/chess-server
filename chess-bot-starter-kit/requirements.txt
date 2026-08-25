@@ -1,0 +1,6 @@
+# This kit is standalone — nothing outside this folder is required.
+#
+#     python3 -m venv .venv
+#     .venv/bin/pip install -r requirements.txt
+chess>=1.11
+httpx>=0.27

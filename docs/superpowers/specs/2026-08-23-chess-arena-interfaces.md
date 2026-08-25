@@ -233,7 +233,7 @@ def detect_termination(fen: str, history_fens: List[str]) -> tuple[bool, Optiona
             A server building it from `SELECT fen_after FROM moves ORDER BY ply`
             drops ply 0 and will not claim the commonest repetition of all
             (Nf3 Nf6 Ng1 Ng8 Nf3 Nf6 Ng1 Ng8 returns to the start three times).
-            `starter-kit/arena.py` is the reference implementation.
+            `chess-bot-starter-kit/arena.py` is the reference implementation.
     
     Returns:
         (is_terminal, termination_reason, result)

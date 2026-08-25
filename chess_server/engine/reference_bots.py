@@ -1,7 +1,7 @@
 """The three reference opponents, and their seeding (role spec §7.3, design §9.3).
 
 The single exception to "no untrusted code runs on the server", because we wrote
-it. Ported from `starter-kit/ref_bots/`, never imported from it: the starter kit
+it. Ported from `chess-bot-starter-kit/ref_bots/`, never imported from it: the starter kit
 is not an installed package and the server must not depend on attendee-facing code.
 
 **Every rating below is a provisional placeholder, not a measurement.**

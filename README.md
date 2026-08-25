@@ -4,7 +4,7 @@ A competition server for a workshop. Attendees write chess bots, connect them,
 and watch a live ELO leaderboard on a projector.
 
 **Attendees do not read this file.** Point them at
-[starter-kit/README.md](starter-kit/README.md).
+[chess-bot-starter-kit/README.md](chess-bot-starter-kit/README.md).
 
 ## Run the server
 
