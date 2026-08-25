@@ -13,12 +13,16 @@ When a decision trades cleverness against clarity, choose clarity. This code get
 
 ## Current state
 
-`chess_core/`, `starter-kit/` and `chess_server/` (store, engine, and most of the API) are built and green. Bot strength and anchor calibration are **deferred** — see design §21. Open decisions taken without review are in [docs/open-questions.md](docs/open-questions.md).
+`chess_core/`, `starter-kit/` and `chess_server/` (store, engine, and most of the API) are built and green.
+
+**The scope was cut for cost.** MCP (§13, including control handoff), challenges (§12), benchmark bots (§10.4), exhibition time control (§11), My Bot dashboard mode (§14) and most of the admin surface (§15) are **gone**. Cut sections are tombstoned in the design spec rather than deleted — renumbering would break every `§x.y` reference. **Do not build anything marked CUT.** §21 has the full table.
+
+Bot strength and anchor calibration are **deferred** — also §21. Open decisions taken without review are in [docs/open-questions.md](docs/open-questions.md).
 
 The spec is the source of truth:
 [docs/superpowers/specs/2026-08-23-chess-arena-design.md](docs/superpowers/specs/2026-08-23-chess-arena-design.md)
 
-Module boundaries — `chess_core` signatures, SSE events, bot/SDK surface, HTTP models, MCP tools, test layout — are pinned in
+Module boundaries — `chess_core` signatures, SSE events, bot/SDK surface, HTTP models, test layout — are pinned in
 [docs/superpowers/specs/2026-08-23-chess-arena-interfaces.md](docs/superpowers/specs/2026-08-23-chess-arena-interfaces.md). Bind to it rather than inventing a signature.
 
 §4 (concurrency), §6 (clock and delivery) and §7.1 (restart recovery) are normative and may not be relaxed for convenience. Build order is §20.
@@ -30,7 +34,7 @@ Module boundaries — `chess_core` signatures, SSE events, bot/SDK surface, HTTP
 ```
 chess_core/      Pure logic. No I/O, no clock reads, no network.
                  Shared by BOTH the server and the local arena.
-chess_server/    store/ engine/ api/ mcp/ — SQLite, one background ticker, FastAPI, MCP
+chess_server/    store/ engine/ api/ — SQLite, one background ticker, FastAPI
 web/             Dashboard. Plain HTML/CSS/JS, no build step.
 starter-kit/     What attendees clone. bot.py is the only file they edit.
 ```
@@ -50,7 +54,6 @@ starter-kit/     What attendees clone. bot.py is the only file they edit.
 - **Elapsed time is `time.monotonic_ns()`, never wall clock.** A laptop suspend must not flag the board.
 - **A clock starts on delivery, not on pairing**, and delivery is idempotent — re-reading a position never restarts the clock.
 - **Bot tokens are stored hashed and never logged.** Not in errors, not in debug output, not in SSE payloads.
-- **`arena_reports` is display-only.** Local arena results are self-reported and unverifiable. No rating, matchmaking, leaderboard, seat, or game-finalisation code may read that table.
 - **`chess_core` stays pure.** If you need the time, pass it in. This is what keeps ELO and matchmaking testable.
 - **Errors aimed at attendees are actionable prose**, not bare status codes. `"No bot registered for this token. Call register_bot first."`
 - **The local arena randomises openings.** Two deterministic bots otherwise replay one identical game, and "100 games" becomes a statistical illusion.

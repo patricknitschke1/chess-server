@@ -1,74 +1,43 @@
 # Open questions
 
-Decisions taken while you were away, and things I could not answer from the specs.
-Each has my recommendation and what I actually built, so you can skim and either
-confirm or redirect. Nothing here is blocking — the server track is buildable as it
-stands — but every item is a decision that nobody but me has reviewed.
+Decisions taken without review, each with what was built and why, so you can
+confirm or redirect cheaply. Nothing here is blocking.
 
-Ordered by how expensive it would be to change later.
-
----
-
-## 1. I invented a route: `GET /games/{id}/legal_moves` FINE
-
-**Status:** built, and added to design §8.1 and interfaces Part 5 in the same change.
-
-Design §5.2, §13.3 and interfaces Part 6 all require the *behaviour* — it is the
-sole delivery trigger when `controller='agent'`, which is what makes `get_game()`'s
-`readOnlyHint` honest by contrast. But no route inventory listed it. It cannot fold
-into `/bots/me/turn` because the agent and the SDK share one bearer token, so the
-server cannot tell them apart from the credential alone.
-
-**This is the only route I added that no document asked for by name.** If you would
-rather the MCP layer got there another way, it is much cheaper to change now than
-after the MCP track binds to it.
+**The scope reduction closed four of the eight questions that were here before.**
+Those are listed at the bottom rather than deleted, so it is clear they were
+answered rather than forgotten.
 
 ---
 
-## 2. Should anchors appear on the leaderboard? FINE
+## 1. Should anchors appear on the leaderboard?
 
 **Currently: no.** Anchors carry `role='anchor'` and the leaderboard filters to
 `role='competitor'`, which leaves `LeaderboardEntry.is_anchor` a field that is
 always false.
 
-The argument for showing them: an attendee at 1150 learns much more from seeing
-`ref-greedy 1000` and `ref-depth2 1200` on the same board than from a number in
-isolation. They are yardsticks, and the whole point of anchors is calibration.
+For showing them: an attendee at 1150 learns more from seeing `ref-greedy 1000`
+and `ref-depth2 1200` on the same board than from a number in isolation. That is
+what anchors are for.
 
-The argument against: they are not competitors, they never move, and they push
-real attendees down the visible list on a projector with limited rows.
+Against: they never move, and they push real attendees down a projector with
+limited rows.
 
-**My recommendation:** show them, visually distinguished, and keep `is_anchor` alive
-to do it. But this is a room-feel decision and yours to make. It is a one-line filter
+**Recommendation:** show them, visually distinguished. It is a one-line filter
 change plus whatever the dashboard does with the flag.
 
 ---
 
-## 3. `POST /admin/reset` — confirm the position
+## 2. Anchor identity: `owner='server'`
 
-**Not yet built** (it is the next task). The plan takes this position and I think it
-is right:
+Anchors need an owner and nothing specified one. I used `'server'`, and
+registration now rejects that owner and the three anchor names, case-folded, so
+an attendee cannot impersonate a reference bot.
 
-- **Requires matchmaking paused first**, `409` otherwise. Without that, the next tick
-  re-pairs the same twenty still-polling bots and the response you just read describes
-  a slate that no longer exists.
-- **Wipes:** `games`, `moves`, `rating_history`, `seats`, `challenges`, all in-process state.
-- **Keeps:** every `bots` row — ids, names, tokens, roles. Nobody re-registers.
-- **Anchors keep their seeded rating; competitors and benchmarks return to 1200.**
-- **`rating_history` is deleted, not archived** — `/admin/consistency` asserts
-  `rating == 1200 + sum(deltas)`, so keeping history while resetting ratings turns
-  that alarm red for every competitor, which is the same as switching it off.
-- Regenerates the run id, emits one `server_run_started`, held polls wake with
-  `reason='paused'`.
-
-**Confirm or adjust before I build it.** The "requires pause first" precondition is
-the part most likely to annoy you in the room at 2pm.
+Fine unless you wanted them attributed to you by name.
 
 ---
 
-## 4. Numbers I invented because no document gave one
-
-Each is defensible, none is derived from anything:
+## 3. Numbers I invented
 
 | Constant | Value | Where | Basis |
 |---|---|---|---|
@@ -79,67 +48,55 @@ Each is defensible, none is derived from anything:
 | `CANCEL_WAIT_SECONDS` | 5 | `engine/supervisor.py` | before refusing to respawn a ticker |
 | `PROBE_TIMEOUT_SECONDS` | 1 | `engine/supervisor.py` | `db_writable` probe timeout |
 
-`REGISTER_PER_IP_PER_MIN = 10` is the one worth a thought: twenty attendees behind
-one conference NAT share an IP, and ten registrations per minute across all of them
-could bite during the opening rush.
+`REGISTER_PER_IP_PER_MIN = 10` is the one worth a thought: twenty attendees
+behind one conference NAT share an IP, and ten registrations per minute across
+all of them could bite during the opening rush.
 
 **Featured-game policy** is also mine: highest combined rating wins, ties to the
-lowest game id, held for 20s so the projector does not flip mid-move. Ranking alone
-re-sorts every time a rating moves.
+lowest game id, held 20s so the projector does not flip mid-move.
 
 ---
 
-## 5. Anchor identity: `owner='server'`
+## 4. Anchor ratings are placeholders
 
-Anchors need an owner and nothing specified one. I used `'server'`, and registration
-now rejects both that owner and the three anchor names, case-folded, so an attendee
-cannot impersonate a reference bot on the leaderboard.
+`ref-random 800`, `ref-greedy 1000`, `ref-depth2 1200` are **not measurements**.
+Design §10.3 originally required calibration from a seeded ladder and warned that
+guessed anchors "would bias every rating in the room" — they are currently
+guessed.
 
-Fine unless you wanted anchors attributed to you by name.
-
----
-
-## 6. Anchor ratings are placeholders, and calibration is deferred with bot development
-
-`ref-random 800`, `ref-greedy 1000`, `ref-depth2 1200` are **not measurements**. Design
-§10.3 originally required them to be calibrated from a seeded ladder and said guessed
-anchors "would bias every rating in the room" — they are currently guessed.
-
-I have marked them provisional everywhere and recorded the deferral, and nothing in
-the architecture depends on the numbers being right. But when bot work resumes this is
-the first thing to do, and it is a single arena run.
-
-Related, and also deferred: the shipped `bot.py` beats `ref-greedy` about 94% of the
-time, where the spec wanted attendees to lose to it and see their rating move in both
-directions on day one.
+Marked provisional everywhere, and nothing in the architecture depends on them
+being right. When bot work resumes this is the first thing to do, and it is a
+single arena run.
 
 ---
 
-## 7. Smaller drift I noticed but did not chase
+## 5. Smaller drift
 
-- **`stalled_games`** is named in design §4's `/health` payload but never defined —
-  what counts as stalled is the builder's choice, and now mine. Worth a look, since
-  it is one of the numbers you will stare at on the health banner.
+- **`stalled_games`** is named in design §4's `/health` payload but never defined
+  — what counts as stalled is my choice. It is one of the numbers you will stare
+  at on the health banner.
 - **`health_tick` cadence** is 2s in the supervisor; interfaces Part 2 says "~3–5s".
-- **Presence** is edge-triggered off a bot query that was originally the leaderboard
-  query. It now has its own `list_presence_candidates()`, but the semantics of
-  "connected" are mine, not specified.
+- **Presence** semantics ("connected") are mine, not specified.
 
 ---
 
-## 8. Where the build stands
+## 6. Where the build stands
 
-Phase 3c is 18 of 21 tasks done. Remaining: `POST /admin/reset` (question 3 above),
-the fake-bot harness that plays complete games over real endpoints, and a final
-discipline sweep. After that the server track is complete and the remaining tracks
-are the SDK, MCP, dashboard and the attendee-facing Claude layer.
+Server: store and engine complete; the API is 18 of 21 tasks. Remaining is the
+fake-bot harness that plays complete games over real endpoints, and a discipline
+sweep — `/admin/reset` was cut, so that task is gone.
 
-**738 tests passing, tree clean.**
+Then: the `chess_client` SDK, the Big Screen dashboard, and a README.
 
-One thing worth knowing about how this went: eleven times now, a mutation the plan
-specified could not actually fail the test it was attached to. The worst was a test
-that asserted its own mutation and could never have passed, and another where the
-planned mutation killed nothing because the code was wrong in a way that masked it —
-that one turned into a real fix. Nearly every one of those was found because the
-build agents were asked to run the mutation rather than trust a green suite. It is
-the single highest-yield thing in the process and worth keeping.
+**658 tests passing, tree clean.**
+
+---
+
+## Closed by the scope reduction
+
+- **`GET /games/{id}/legal_moves`** — I had invented this route because §13.3 and
+  the MCP tools needed an agent delivery site. MCP is cut, so the route is gone.
+- **`/admin/reset` semantics** — cut. Restarting the process covers most of it
+  through §7.1 recovery, which is already tested.
+- **Whether to build the `arena_reports` vertical** — cut with its producer.
+- **The `controller` and agent-handoff questions** — cut with §13.3.
