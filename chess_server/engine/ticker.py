@@ -11,7 +11,6 @@ import chess
 
 from chess_core import (
     DELIVERY_GRACE_NS,
-    EXHIBITION_TIME_CONTROL_NS,
     RATED_INCREMENT_NS,
     RATED_TIME_CONTROL_NS,
     TICK_INTERVAL_NS,
@@ -93,9 +92,6 @@ async def _unit(txn: Txn, name: str) -> AsyncIterator[None]:
             yield
     except (CASConflict, sqlite3.IntegrityError, AnchorMoveFailed) as exc:
         logger.info("unit %s rolled back: %s", name, exc)
-
-
-EXHIBITION_TIME_CONTROL_MS = ns_to_ms(EXHIBITION_TIME_CONTROL_NS)
 
 
 async def step_matchmaking(deps: EngineDeps, txn: Txn, now_mono: int) -> None:

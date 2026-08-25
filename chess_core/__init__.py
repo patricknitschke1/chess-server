@@ -37,8 +37,6 @@ from chess_core.rules import (
 from chess_core.clock import (
     RATED_TIME_CONTROL_NS,
     RATED_INCREMENT_NS,
-    EXHIBITION_TIME_CONTROL_NS,
-    EXHIBITION_INCREMENT_NS,
     DELIVERY_GRACE_NS,
     POLL_RECENCY_NS,
     POLL_HOLD_NS,
@@ -111,8 +109,6 @@ __all__ = [
     # Clock
     "RATED_TIME_CONTROL_NS",
     "RATED_INCREMENT_NS",
-    "EXHIBITION_TIME_CONTROL_NS",
-    "EXHIBITION_INCREMENT_NS",
     "DELIVERY_GRACE_NS",
     "POLL_RECENCY_NS",
     "POLL_HOLD_NS",

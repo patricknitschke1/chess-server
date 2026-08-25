@@ -10,8 +10,6 @@ from chess_core.types import Color, ClockState, ClockUpdateResult
 # Constants per §5.2
 RATED_TIME_CONTROL_NS = 180_000_000_000  # 3 minutes
 RATED_INCREMENT_NS = 2_000_000_000       # 2 seconds
-EXHIBITION_TIME_CONTROL_NS = 300_000_000_000  # 5 minutes
-EXHIBITION_INCREMENT_NS = 10_000_000_000      # 10 seconds
 DELIVERY_GRACE_NS = 15_000_000_000       # 15 seconds
 POLL_RECENCY_NS = 5_000_000_000          # pool eligibility window (§9.1)
 POLL_HOLD_NS = 20_000_000_000            # server long-poll hold (§8.4)

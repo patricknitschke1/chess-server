@@ -1,8 +1,6 @@
 import pytest
 
 from chess_core import (
-    EXHIBITION_INCREMENT_NS,
-    EXHIBITION_TIME_CONTROL_NS,
     RATED_INCREMENT_NS,
     RATED_TIME_CONTROL_NS,
     STARTING_FEN,
@@ -99,29 +97,24 @@ async def test_insert_game_takes_nanoseconds_and_stores_milliseconds(repos):
 
 
 @pytest.mark.parametrize(
-    "white_kwargs,black_kwargs,time_control_ns,expected",
+    "white_kwargs,black_kwargs,expected",
     [
-        ({"owner": "ada"}, {"owner": "ada"}, RATED_TIME_CONTROL_NS, 0),
-        ({}, {}, EXHIBITION_TIME_CONTROL_NS, 0),
-        ({"role": "anchor", "is_anchor": 1}, {}, RATED_TIME_CONTROL_NS, 1),
-        ({}, {}, RATED_TIME_CONTROL_NS, 1),
+        ({"owner": "ada"}, {"owner": "ada"}, 0),
+        ({"role": "anchor", "is_anchor": 1}, {}, 1),
+        ({}, {}, 1),
     ],
-    ids=["shared_owner", "exhibition", "one_anchor", "two_competitors"],
+    ids=["shared_owner", "one_anchor", "two_competitors"],
 )
 async def test_rated_is_settled_at_creation(
-    repos, white_kwargs, black_kwargs, time_control_ns, expected
+    repos, white_kwargs, black_kwargs, expected
 ):
     bots, games, _ = repos
     white = await _bot(bots, "white", **white_kwargs)
     black = await _bot(bots, "black", **black_kwargs)
-    increment_ns = (
-        EXHIBITION_INCREMENT_NS
-        if time_control_ns == EXHIBITION_TIME_CONTROL_NS
-        else RATED_INCREMENT_NS
-    )
 
     game_id = await _game(
-        games, white, black, time_control_ns=time_control_ns, increment_ns=increment_ns
+        games, white, black,
+        time_control_ns=RATED_TIME_CONTROL_NS, increment_ns=RATED_INCREMENT_NS,
     )
 
     assert (await games.get_by_id(game_id)).rated == expected

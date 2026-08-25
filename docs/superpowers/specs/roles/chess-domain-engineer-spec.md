@@ -138,8 +138,6 @@ If your work requires opening a socket, reading the system clock (`time.monotoni
 7. **Constants** (§6, §11)
    - `RATED_TIME_CONTROL_NS = 180_000_000_000` (3 minutes)
    - `RATED_INCREMENT_NS = 2_000_000_000` (2 seconds)
-   - `EXHIBITION_TIME_CONTROL_NS = 300_000_000_000` (5 minutes)
-   - `EXHIBITION_INCREMENT_NS = 10_000_000_000` (10 seconds)
    - `DELIVERY_GRACE_NS = 15_000_000_000` (15 seconds)
 
 **Normative:**
@@ -352,7 +350,6 @@ All signatures are pinned in **Interfaces Part 1**. Bind to them; do not invent 
 
 **Constants:**
 - `RATED_TIME_CONTROL_NS`, `RATED_INCREMENT_NS`
-- `EXHIBITION_TIME_CONTROL_NS`, `EXHIBITION_INCREMENT_NS`
 - `STARTING_RATING`
 
 **From rules.py:**

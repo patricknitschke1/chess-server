@@ -4,8 +4,6 @@ import sqlite3
 import pytest
 
 from chess_core import (
-    EXHIBITION_INCREMENT_NS,
-    EXHIBITION_TIME_CONTROL_NS,
     RATED_INCREMENT_NS,
     RATED_TIME_CONTROL_NS,
     STARTING_FEN,
@@ -117,25 +115,19 @@ async def test_both_clocks_start_at_three_minutes_in_milliseconds(store, deps, s
 
 
 @pytest.mark.parametrize(
-    "names,role,owner,time_control_ns,expected",
+    "names,role,owner,expected",
     [
-        (("a", "b"), "competitor", None, RATED_TIME_CONTROL_NS, 1),
-        (("a", "b"), "competitor", "same", RATED_TIME_CONTROL_NS, 0),
-        (("a", "b"), "competitor", None, EXHIBITION_TIME_CONTROL_NS, 0),
+        (("a", "b"), "competitor", None, 1),
+        (("a", "b"), "competitor", "same", 0),
     ],
 )
 async def test_rated_is_settled_at_creation(
-    store, deps, seed_bots, names, role, owner, time_control_ns, expected
+    store, deps, seed_bots, names, role, owner, expected
 ):
     a, b = await seed_bots(*names, role=role, owner=owner)
-    increment_ns = (
-        RATED_INCREMENT_NS if time_control_ns == RATED_TIME_CONTROL_NS
-        else EXHIBITION_INCREMENT_NS
-    )
 
     async with critical_section(store.writer, store.executor, deps.sink) as txn:
-        game_id = await _create(deps, txn, a, b, time_control_ns=time_control_ns,
-                                increment_ns=increment_ns)
+        game_id = await _create(deps, txn, a, b)
 
     assert (await _games(store).get_by_id(game_id)).rated == expected
 

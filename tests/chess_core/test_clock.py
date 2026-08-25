@@ -370,8 +370,6 @@ def test_ns_to_ms():
 def test_constants_exist():
     assert clock.RATED_TIME_CONTROL_NS == 180_000_000_000
     assert clock.RATED_INCREMENT_NS == 2_000_000_000
-    assert clock.EXHIBITION_TIME_CONTROL_NS == 300_000_000_000
-    assert clock.EXHIBITION_INCREMENT_NS == 10_000_000_000
     assert clock.DELIVERY_GRACE_NS == 15_000_000_000
     assert clock.POLL_RECENCY_NS == 5_000_000_000
     assert clock.POLL_HOLD_NS == 20_000_000_000
@@ -389,8 +387,6 @@ def test_clock_is_the_sole_declaration_site_for_its_constants():
     for name in (
         "RATED_TIME_CONTROL_NS",
         "RATED_INCREMENT_NS",
-        "EXHIBITION_TIME_CONTROL_NS",
-        "EXHIBITION_INCREMENT_NS",
         "DELIVERY_GRACE_NS",
         "POLL_RECENCY_NS",
         "POLL_HOLD_NS",

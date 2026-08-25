@@ -6,8 +6,6 @@ import pytest
 from chess_core import (
     ANCHOR_RATING_WINDOW,
     DELIVERY_GRACE_NS,
-    EXHIBITION_INCREMENT_NS,
-    EXHIBITION_TIME_CONTROL_NS,
     K_FACTOR,
     PLY_CAP,
     POLL_HOLD_NS,
@@ -26,8 +24,6 @@ from chess_server.store.rows import GameRow
 _NS_CONSTANTS = (
     RATED_TIME_CONTROL_NS,
     RATED_INCREMENT_NS,
-    EXHIBITION_TIME_CONTROL_NS,
-    EXHIBITION_INCREMENT_NS,
     DELIVERY_GRACE_NS,
     POLL_RECENCY_NS,
     POLL_HOLD_NS,

@@ -200,11 +200,9 @@ class BotRepo(_Repo):
         return [from_row(BotRow, row) for row in rows]
 
 
-def rated_at_creation(white: BotRow, black: BotRow, time_control_ns: int) -> int:
-    """Design §5.3 rules 3-6, first match wins. Rule 1 belongs to finalisation."""
+def rated_at_creation(white: BotRow, black: BotRow) -> int:
+    """Design §5.3 rules 3, 5 and 6. Rule 1 belongs to finalisation."""
     if white.owner == black.owner:
-        return 0
-    if time_control_ns != RATED_TIME_CONTROL_NS:
         return 0
     return 1
 
@@ -261,7 +259,7 @@ class GameRepo(_Repo):
                 ns_to_ms(time_control_ns),
                 ns_to_ms(increment_ns),
                 fields["to_move_since_mono"],
-                rated_at_creation(white, black, time_control_ns),
+                rated_at_creation(white, black),
                 source,
                 created_at,
             ),
