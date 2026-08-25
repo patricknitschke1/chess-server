@@ -73,3 +73,14 @@ class SubmitMoveResponse(BaseModel):
     status: str
     result: Optional[str] = None
     termination: Optional[str] = None
+
+
+class ResignRequest(BaseModel):
+    ply: int
+
+
+class ResignResponse(BaseModel):
+    game_id: int
+    status: str
+    result: str
+    termination: str

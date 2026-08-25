@@ -13,14 +13,23 @@ from chess_server.api.errors import (
     CAS_CONFLICT,
     CONTROLLER_IS_AGENT,
     FLAGGED,
+    GAME_ALREADY_ENDED,
+    GAME_NOT_FOUND,
     ILLEGAL_MOVE,
     NOT_DELIVERED,
     NOT_IN_GAME,
     NOT_TO_MOVE,
     ApiError,
 )
-from chess_server.api.models import SubmitMoveRequest, SubmitMoveResponse
+from chess_server.api.models import (
+    ResignRequest,
+    ResignResponse,
+    SubmitMoveRequest,
+    SubmitMoveResponse,
+)
 from chess_server.api.state import AppState, get_state
+from chess_server.engine import games as games_module
+from chess_server.engine.games import ResignRefused, resign_game
 from chess_server.engine.runner import (
     Applied,
     Flagged,
@@ -31,10 +40,21 @@ from chess_server.engine.runner import (
     apply_move,
 )
 from chess_server.store.cas import CASConflict
-from chess_server.store.repositories import GameRepo, SeatRepo
+from chess_server.store.repositories import NON_TERMINAL, GameRepo, SeatRepo
 from chess_server.store.rows import BotRow, GameRow
 
 router = APIRouter()
+
+
+async def _load_game(app_state: AppState, game_id: int) -> GameRow:
+    game = await GameRepo(
+        app_state.store.reader, app_state.store.reader_executor
+    ).get_by_id(game_id)
+    if game is None:
+        raise ApiError(
+            status.HTTP_404_NOT_FOUND, GAME_NOT_FOUND.format(game_id=game_id)
+        )
+    return game
 
 
 async def _mover_seat(
@@ -44,20 +64,24 @@ async def _mover_seat(
 
     Read outside the transaction, and sound there because `ply` is part of the CAS:
     a caller who was the mover at ply P and whose CAS at ply P succeeds is still the
-    mover. When the plies differ this says nothing and defers to the CAS, so a move
-    that raced the opponent's still gets design §8.3's `409` — discard and re-poll —
-    rather than a `403` that reads like an authorisation fault. `controller` gets no
-    such pin, which is why it is checked inside the transaction (design §13.3).
+    mover. When the game has moved on this says nothing and defers to the CAS, so a
+    move that raced the opponent's — or arrived after the game ended, when the seats
+    are already gone — gets design §8.3's `409` (discard and re-poll) rather than a
+    `403` that reads like an authorisation fault. `controller` gets no such pin,
+    which is why it is checked inside the transaction (design §13.3).
     """
-    conn, executor = app_state.store.reader, app_state.store.reader_executor
-    seat = await SeatRepo(conn, executor).get_seat(bot.id)
+    game = await _load_game(app_state, game_id)
+    if game.ply != from_ply or game.status not in NON_TERMINAL:
+        return
+    seat = await SeatRepo(
+        app_state.store.reader, app_state.store.reader_executor
+    ).get_seat(bot.id)
     if seat is None or seat.game_id != game_id:
         raise ApiError(
             status.HTTP_403_FORBIDDEN, NOT_IN_GAME.format(game_id=game_id)
         )
-    game = await GameRepo(conn, executor).get_by_id(game_id)
     mover_id = game.white_bot_id if game.to_move == Color.WHITE.value else game.black_bot_id
-    if game.ply == from_ply and mover_id != bot.id:
+    if mover_id != bot.id:
         raise ApiError(
             status.HTTP_403_FORBIDDEN, NOT_TO_MOVE.format(game_id=game_id)
         )
@@ -116,7 +140,6 @@ async def submit_move(
 ):
     app_state = get_state(request)
     await _mover_seat(app_state, bot, game_id, payload.ply)
-    games = GameRepo(app_state.store.reader, app_state.store.reader_executor)
     try:
         outcome = await apply_move(
             app_state.deps, game_id, payload.ply, payload.move,
@@ -124,7 +147,42 @@ async def submit_move(
             client_reported_ms=payload.client_reported_ms,
         )
     except CASConflict:
-        raise _cas_error(await games.get_by_id(game_id))
+        raise _cas_error(await _load_game(app_state, game_id))
     # Re-read after the commit: `Applied` carries the row as it was inside the
     # transaction, and a finalisation that followed the move is not on it.
-    return _outcome_response(outcome, await games.get_by_id(game_id), payload.move)
+    return _outcome_response(outcome, await _load_game(app_state, game_id), payload.move)
+
+
+@router.post("/games/{game_id}/resign", response_model=ResignResponse)
+async def resign(
+    game_id: int,
+    payload: ResignRequest,
+    request: Request,
+    bot: BotRow = Depends(require_bot),
+):
+    app_state = get_state(request)
+    game = await _load_game(app_state, game_id)
+    try:
+        outcome = await resign_game(
+            app_state.deps, game_id, bot.id, payload.ply, controller="client"
+        )
+    except CASConflict:
+        game = await _load_game(app_state, game_id)
+        raise ApiError(
+            status.HTTP_409_CONFLICT,
+            GAME_ALREADY_ENDED.format(game_id=game_id, ply=payload.ply),
+            {"ply": game.ply, "fen": game.fen, "status": game.status},
+        )
+    if isinstance(outcome, ResignRefused):
+        raise ApiError(
+            status.HTTP_403_FORBIDDEN,
+            NOT_IN_GAME.format(game_id=game_id)
+            if outcome.reason == games_module.NOT_IN_GAME
+            else CONTROLLER_IS_AGENT,
+        )
+    return ResignResponse(
+        game_id=outcome.id,
+        status=outcome.status,
+        result=outcome.result,
+        termination=outcome.termination,
+    )

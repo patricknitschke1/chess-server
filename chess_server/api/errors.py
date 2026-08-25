@@ -14,6 +14,10 @@ RETRY_AFTER_SECONDS = 3
 CONTROLLER_IS_AGENT = (
     "Controller is 'agent'. Call release_control() before moving from your client."
 )
+GAME_ALREADY_ENDED = (
+    "Game {game_id} is no longer at ply {ply}. It has moved on or already ended."
+)
+GAME_NOT_FOUND = "Game {game_id} not found."
 CAS_CONFLICT = (
     "The position has changed since ply {ply}. Discard this move and poll"
     " GET /bots/me/turn again."

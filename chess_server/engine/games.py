@@ -1,4 +1,5 @@
 """Game creation and the terminal transitions (role spec §6.5, §7.2)."""
+from dataclasses import dataclass
 from typing import Optional
 
 from chess_core import STARTING_FEN, Color, GameResult, RatingUpdate, TerminationReason
@@ -7,9 +8,16 @@ from chess_server.engine import state
 from chess_server.engine.deps import EngineDeps
 from chess_server.engine.rating import derive_rating_updates
 from chess_server.engine.wall import utc_now_iso
-from chess_server.store.repositories import BotRepo, GameRepo, RatingHistoryRepo, SeatRepo
+from chess_server.store.cas import CASConflict
+from chess_server.store.repositories import (
+    NON_TERMINAL,
+    BotRepo,
+    GameRepo,
+    RatingHistoryRepo,
+    SeatRepo,
+)
 from chess_server.store.rows import BotRow, GameRow
-from chess_server.store.txn import Txn
+from chess_server.store.txn import Txn, critical_section
 
 # Design §5.3 rule 1, and only rule 1. Everything else leaves `rated` alone.
 _RULE_1_UNRATES = frozenset({
@@ -201,4 +209,43 @@ async def forfeit_game_locked(
         deps, txn, game, "finished", opposite_win(mover),
         TerminationReason.ILLEGAL_FORFEIT,
     )
+
+
+NOT_IN_GAME = "not_in_game"
+CONTROLLER = "controller"
+
+
+@dataclass(frozen=True)
+class ResignRefused:
+    reason: str
+
+
+async def resign_game(
+    deps: EngineDeps, game_id: int, bot_id: int, from_ply: int, *, controller: str
+) -> GameRow | ResignRefused:
+    """One outer critical section. Raises `CASConflict` when the position moved.
+
+    The **resigner** loses. Reading `game.to_move` here would hand the win to the
+    bot that gave up whenever it resigned on its opponent's clock.
+    """
+    async with critical_section(deps.conn, deps.executor, deps.sink) as txn:
+        games = GameRepo(txn.conn, txn.executor)
+        game = await games.get_by_id(game_id)
+        # Before the seat check, because a terminal game has no seats: asked the
+        # other way round, resigning a game that just ended reads as "you are not
+        # a player" rather than "it is over".
+        if game is None or game.ply != from_ply or game.status not in NON_TERMINAL:
+            raise CASConflict(f"game {game_id} is not at ply {from_ply} and non-terminal")
+        seat = await SeatRepo(txn.conn, txn.executor).get_seat(bot_id)
+        if seat is None or seat.game_id != game_id:
+            return ResignRefused(NOT_IN_GAME)
+        bot = await BotRepo(txn.conn, txn.executor).get_by_id(bot_id)
+        if bot.controller != controller:
+            return ResignRefused(CONTROLLER)
+
+        resigner = Color.WHITE if game.white_bot_id == bot_id else Color.BLACK
+        await finalise_game_locked(
+            deps, txn, game, opposite_win(resigner), TerminationReason.RESIGNATION
+        )
+        return await games.get_by_id(game_id)
 
