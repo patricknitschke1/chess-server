@@ -31,6 +31,22 @@ FLAGGED = (
     "Your clock ran out before this move arrived. The game is over."
 )
 SEAT_HELD = "Either you or your opponent is already in a game."
+OPPONENT_NOT_FOUND = "Opponent bot not found: {name}. Check the name on /leaderboard."
+SELF_CHALLENGE = "You cannot challenge yourself. Pick another bot as the opponent."
+UNKNOWN_TIME_CONTROL = (
+    "Unknown time_control '{time_control}'. Use 'rated' (3+2) or 'exhibition' (5+10)."
+)
+OPEN_OUTGOING_CHALLENGE = (
+    "You already have an open outgoing challenge. Wait for it to be answered or"
+    " for it to time out."
+)
+AGENT_IN_RATED_CHALLENGE = (
+    "'{name}' is under agent control, so this can only be an exhibition game."
+    " Send it with time_control='exhibition', or call release_control()."
+)
+CHALLENGE_NOT_FOUND = "Challenge {challenge_id} not found."
+NOT_THE_OPPONENT = "You are not the opponent of this challenge."
+CHALLENGE_ALREADY_RESOLVED = "Challenge already {status}."
 TAKE_CONTROL_WHILE_SEATED = (
     "Cannot take control while your bot is in a game. Wait for it to finish, or resign."
 )

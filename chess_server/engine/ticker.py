@@ -103,7 +103,10 @@ async def _unit(txn: Txn, name: str) -> AsyncIterator[None]:
 EXHIBITION_TIME_CONTROL_MS = ns_to_ms(EXHIBITION_TIME_CONTROL_NS)
 
 
-async def _challenge_event(txn: Txn, challenge: ChallengeRow) -> dict:
+async def challenge_event(txn: Txn, challenge: ChallengeRow) -> dict:
+    """The one definition of the `challenge_updated` payload. The routes emit it too
+    (§8.4), and a second copy there is how two sites end up disagreeing about a
+    field neither of them changed."""
     bots = BotRepo(txn.conn, txn.executor)
     challenger = await bots.get_by_id(challenge.challenger_bot_id)
     opponent = await bots.get_by_id(challenge.opponent_bot_id)
@@ -150,7 +153,7 @@ async def step_challenges(deps: EngineDeps, txn: Txn, now_mono: int) -> None:
                 )
                 txn.emit(
                     "challenge_updated",
-                    await _challenge_event(txn, await challenges.get_by_id(challenge.id)),
+                    await challenge_event(txn, await challenges.get_by_id(challenge.id)),
                 )
                 continue
 
@@ -167,7 +170,7 @@ async def step_challenges(deps: EngineDeps, txn: Txn, now_mono: int) -> None:
             )
             txn.emit(
                 "challenge_updated",
-                await _challenge_event(txn, await challenges.get_by_id(challenge.id)),
+                await challenge_event(txn, await challenges.get_by_id(challenge.id)),
             )
 
 
@@ -330,7 +333,7 @@ async def step_challenge_ttl(deps: EngineDeps, txn: Txn, now_mono: int) -> None:
             )
             txn.emit(
                 "challenge_updated",
-                await _challenge_event(txn, await challenges.get_by_id(challenge.id)),
+                await challenge_event(txn, await challenges.get_by_id(challenge.id)),
             )
 
 
