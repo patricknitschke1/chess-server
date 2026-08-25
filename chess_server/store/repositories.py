@@ -142,6 +142,9 @@ class BotRepo(_Repo):
     async def update_controller(self, bot_id: int, controller: str) -> None:
         await self._write("UPDATE bots SET controller = ? WHERE id = ?", (controller, bot_id))
 
+    async def update_token_hash(self, bot_id: int, token_hash: str) -> None:
+        await self._write("UPDATE bots SET token_hash = ? WHERE id = ?", (token_hash, bot_id))
+
     async def update_rating_and_counters(self, bot_id: int, rating: int, outcome: str) -> None:
         column = _COUNTER_COLUMN[outcome]
         await self._write(

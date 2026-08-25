@@ -268,3 +268,36 @@ class HealthResponse(BaseModel):
     db_writable: bool
     consecutive_tick_errors: int
     ticker_restarts: int
+
+
+class AbortGameResponse(BaseModel):
+    game_id: int
+    status: str
+    termination: str
+
+
+class PauseMatchmakingResponse(BaseModel):
+    paused: bool
+
+
+class ResumeMatchmakingResponse(BaseModel):
+    paused: bool
+
+
+class ReissueTokenResponse(BaseModel):
+    bot_id: int
+    bot_name: str
+    token: str
+
+
+class ConsistencyViolation(BaseModel):
+    bot_id: int
+    bot_name: str
+    expected_rating: int
+    actual_rating: int
+    delta_sum: int
+
+
+class ConsistencyCheckResponse(BaseModel):
+    consistent: bool
+    violations: List[ConsistencyViolation]

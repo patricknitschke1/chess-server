@@ -14,6 +14,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from chess_server.api import (
+    admin,
     health,
     routes_bots,
     routes_challenges,
@@ -81,6 +82,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         app_state.deps.sink,
     )
     app_state.metrics.last_tick_mono = app_state.deps.now_mono()
+    await admin.check_consistency(app_state)
     start_ticker(app_state)
     start_supervisor(app_state)
     try:
@@ -101,6 +103,7 @@ def create_app(app_state: AppState) -> FastAPI:
     app.include_router(routes_challenges.router)
     app.include_router(routes_public.router)
     app.include_router(health.router)
+    app.include_router(admin.router)
 
     @app.exception_handler(ApiError)
     async def _api_error(request: Request, exc: ApiError) -> JSONResponse:
