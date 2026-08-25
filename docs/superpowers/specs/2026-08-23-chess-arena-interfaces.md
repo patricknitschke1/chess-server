@@ -986,7 +986,8 @@ class ChessClient:
         
         Args:
             name: Bot name (must be unique)
-            owner: Owner identifier (email or username)
+            owner: Owner identifier (letters, digits, spaces, underscores or
+                hyphens — the server rejects `@`, so not an email)
             join_code: Workshop join code
         
         Returns:
@@ -1838,7 +1839,7 @@ All tools use `Authorization: Bearer <token>` forwarded from `.mcp.json`.
 **register_bot(name: str, owner: str, role: str = "competitor")**
 - **Parameters:**
   - `name` (str, required): Bot name (must be unique)
-  - `owner` (str, required): Owner identifier (email or username)
+  - `owner` (str, required): Owner identifier — letters, digits, spaces, underscores or hyphens. `@` is rejected, so an email address is not valid.
   - `role` (str, optional): "competitor" or "benchmark", default "competitor"
 - **Returns:**
   ```python

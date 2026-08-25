@@ -175,7 +175,7 @@ class TokenInvalid(ClientError):
     """Bot token is invalid. Re-register."""
     pass
 
-class ServerUnreachable(ClientError):
+class ServerError(ClientError):
     """Server is down or unreachable. Retry with backoff."""
     pass
 
@@ -197,7 +197,7 @@ class ChessClient:
         """
         self.server_url = server_url.rstrip('/')
         self.token = token
-        self.session = requests.Session()
+        self.session = httpx.Client()
         self.session.headers.update({'User-Agent': 'chess-client/1.0'})
         if token:
             self.session.headers.update({'Authorization': f'Bearer {token}'})
@@ -608,7 +608,7 @@ Enumerate every failure an attendee can hit and give exact message text. Each mu
 
 ### Server unreachable
 
-**Trigger:** `requests.exceptions.ConnectionError` on any request
+**Trigger:** `httpx.ConnectError` on any request
 
 **Message:**
 ```
