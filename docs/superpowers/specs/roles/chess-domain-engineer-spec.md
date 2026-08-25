@@ -135,19 +135,16 @@ If your work requires opening a socket, reading the system clock (`time.monotoni
    - `ms_to_ns(ms: int) -> int`
    - `ns_to_ms(ns: int) -> int`
 
-7. **Constants** (§6, §11, §13.3)
+7. **Constants** (§6, §11)
    - `RATED_TIME_CONTROL_NS = 180_000_000_000` (3 minutes)
    - `RATED_INCREMENT_NS = 2_000_000_000` (2 seconds)
    - `EXHIBITION_TIME_CONTROL_NS = 300_000_000_000` (5 minutes)
    - `EXHIBITION_INCREMENT_NS = 10_000_000_000` (10 seconds)
    - `DELIVERY_GRACE_NS = 15_000_000_000` (15 seconds)
-   - `AGENT_DELIVERY_GRACE_NS = 60_000_000_000` (60 seconds)
-   - `AGENT_AUTO_RELEASE_NS = 45_000_000_000` (45 seconds)
 
 **Normative:**
 - §6: **Clocks run only between delivery and receipt.** A bot is never charged for time before the position was sent.
 - §6.3: Undelivered positions have a **15s deadline** (DELIVERY_GRACE_NS). At ply 0 → aborted/no_show; mid-game → finished/abandoned.
-- §6.3: **AGENT_DELIVERY_GRACE_NS = 60s** applies while `controller='agent'`
 - §6.4: **Ordering is unbreakable** — deduct → flag-check → no-increment-on-flag → apply → increment → switch. The API is shaped so the wrong order is unrepresentable.
 - §6.4: **Flag takes precedence over illegal move:** step 3 precedes validation. A bot that submits an illegal move after its flag has fallen has flagged.
 - §6.2: **Re-delivery is idempotent.** Re-reading a position returns identical payload and never restarts the clock.

@@ -10,8 +10,6 @@ from typing import AsyncIterator, Awaitable, Callable, Optional, Sequence
 import chess
 
 from chess_core import (
-    AGENT_AUTO_RELEASE_NS,
-    AGENT_DELIVERY_GRACE_NS,
     DELIVERY_GRACE_NS,
     EXHIBITION_TIME_CONTROL_NS,
     RATED_INCREMENT_NS,
@@ -198,15 +196,9 @@ async def step_delivery_grace(deps: EngineDeps, txn: Txn, now_mono: int) -> None
     broadening it re-admits every finished game forever, silently, because the
     finalisation CAS then returns rowcount 0 rather than an error."""
     games = GameRepo(txn.conn, txn.executor)
-    bots = BotRepo(txn.conn, txn.executor)
     for game in await games.list_undelivered_non_terminal():
         async with _unit(txn, f"grace_{game.id}"):
-            mover = await bots.get_by_id(_mover_id(game))
-            # The grace belongs to the bot to move; `games` has no controller column.
-            grace_ns = (
-                AGENT_DELIVERY_GRACE_NS if mover.controller == "agent" else DELIVERY_GRACE_NS
-            )
-            if not check_delivery_timeout(_clock_from_game(game), now_mono, grace_ns):
+            if not check_delivery_timeout(_clock_from_game(game), now_mono, DELIVERY_GRACE_NS):
                 continue
             if game.ply == 0:
                 await abort_game_locked(deps, txn, game, TerminationReason.NO_SHOW)
@@ -227,22 +219,6 @@ async def step_flag(deps: EngineDeps, txn: Txn, now_mono: int) -> None:
                 await finalise_game_locked(
                     deps, txn, game, opposite_win(game.to_move), TerminationReason.FLAG
                 )
-
-
-async def step_agent_release(deps: EngineDeps, txn: Txn, now_mono: int) -> None:
-    """Role spec §7.5. AGENT_AUTO_RELEASE_NS (45 s) sits below AGENT_DELIVERY_GRACE_NS
-    (60 s); reversed, the grace always fires first and this branch is unreachable."""
-    bots = BotRepo(txn.conn, txn.executor)
-    for bot in await bots.list_agent_controlled():
-        # NULL releases immediately: the safe direction, and 3c's `take` writes
-        # the field in the same transaction, so it should never be seen.
-        if bot.last_agent_action_mono is not None and is_within(
-            bot.last_agent_action_mono, now_mono, AGENT_AUTO_RELEASE_NS
-        ):
-            continue
-        async with _unit(txn, f"release_{bot.id}"):
-            await bots.update_controller(bot.id, "client")
-            txn.defer(lambda bot_id=bot.id: deps.wake(bot_id))
 
 
 async def step_presence(deps: EngineDeps, txn: Txn, now_mono: int) -> None:
@@ -273,7 +249,6 @@ STEPS: list[Step] = [
     step_anchor_moves,
     step_delivery_grace,
     step_flag,
-    step_agent_release,
     step_presence,
 ]
 

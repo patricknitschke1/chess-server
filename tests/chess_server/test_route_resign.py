@@ -50,22 +50,6 @@ async def test_resigning_a_finished_game_is_409(client, api_state, table, games)
     assert response.status_code == 409
 
 
-async def test_an_agent_controlled_bot_cannot_resign_from_the_client_route(
-    client, api_state, table, games, bot_repo
-):
-    from chess_server.store.txn import critical_section
-
-    white, black, game_id = table
-    async with critical_section(api_state.store.writer, api_state.store.executor):
-        await bot_repo.update_controller(black["bot_id"], "agent")
-
-    response = await resign(client, black["token"], game_id, 0)
-
-    assert response.status_code == 403
-    assert "release_control" in response.json()["error"]
-    assert (await games.get_by_id(game_id)).status == "active"
-
-
 async def test_black_resigning_while_white_is_to_move_gives_white_the_win(
     client, api_state, table, games
 ):

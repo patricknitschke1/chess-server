@@ -36,7 +36,6 @@ class TurnPayload:
     black_ms: int
     time_control_ms: int
     increment_ms: int
-    controller: str
 
 
 def color_of(bot_id: int, game: GameRow) -> str:
@@ -58,7 +57,6 @@ def build_payload(bot: BotRow, game: GameRow) -> TurnPayload:
         black_ms=game.black_ms,
         time_control_ms=game.time_control_ms,
         increment_ms=game.increment_ms,
-        controller=bot.controller,
     )
 
 

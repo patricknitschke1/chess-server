@@ -212,7 +212,6 @@ async def forfeit_game_locked(
 
 
 NOT_IN_GAME = "not_in_game"
-CONTROLLER = "controller"
 
 
 @dataclass(frozen=True)
@@ -221,7 +220,7 @@ class ResignRefused:
 
 
 async def resign_game(
-    deps: EngineDeps, game_id: int, bot_id: int, from_ply: int, *, controller: str
+    deps: EngineDeps, game_id: int, bot_id: int, from_ply: int
 ) -> GameRow | ResignRefused:
     """One outer critical section. Raises `CASConflict` when the position moved.
 
@@ -239,9 +238,6 @@ async def resign_game(
         seat = await SeatRepo(txn.conn, txn.executor).get_seat(bot_id)
         if seat is None or seat.game_id != game_id:
             return ResignRefused(NOT_IN_GAME)
-        bot = await BotRepo(txn.conn, txn.executor).get_by_id(bot_id)
-        if bot.controller != controller:
-            return ResignRefused(CONTROLLER)
 
         resigner = Color.WHITE if game.white_bot_id == bot_id else Color.BLACK
         await finalise_game_locked(

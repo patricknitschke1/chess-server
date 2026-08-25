@@ -16,8 +16,6 @@ CREATE TABLE IF NOT EXISTS bots (
   losses                 INTEGER NOT NULL DEFAULT 0,
   draws                  INTEGER NOT NULL DEFAULT 0,
   games_played           INTEGER NOT NULL DEFAULT 0,
-  controller             TEXT    NOT NULL DEFAULT 'client',  -- 'client' | 'agent'
-  last_agent_action_mono INTEGER,
   last_poll_at           TEXT,
   last_poll_mono         INTEGER,
   last_color             TEXT,                          -- 'white' | 'black' | NULL

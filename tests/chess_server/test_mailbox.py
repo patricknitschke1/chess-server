@@ -95,7 +95,6 @@ async def test_the_payload_echoes_the_game_s_own_time_control(
     payload = state.mailbox[white.id]
     assert (payload.time_control_ms, payload.increment_ms) == (60_000, 1_000)
     assert (payload.white_ms, payload.black_ms) == (game.white_ms, game.black_ms)
-    assert payload.controller == "client"
 
 
 async def test_a_rolled_back_delivery_leaves_no_mailbox_entry(
@@ -177,7 +176,7 @@ def test_the_payload_is_frozen_and_carries_exactly_the_wire_fields():
     payload = TurnPayload(
         bot_id=1, game_id=1, ply=0, color="white", fen=STARTING_FEN,
         legal_moves=[], history_san=[], white_ms=1, black_ms=1,
-        time_control_ms=1, increment_ms=0, controller="client",
+        time_control_ms=1, increment_ms=0,
     )
     with pytest.raises(dataclasses.FrozenInstanceError):
         payload.ply = 1

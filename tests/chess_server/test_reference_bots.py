@@ -95,7 +95,6 @@ async def test_seeded_anchors_carry_the_anchor_columns(store):
     for anchor in anchors:
         assert anchor.role == "anchor"
         assert anchor.is_anchor == 1
-        assert anchor.controller == "client"
         assert anchor.owner == "server"
         assert anchor.last_poll_mono is None
 

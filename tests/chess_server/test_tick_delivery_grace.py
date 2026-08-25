@@ -2,7 +2,6 @@
 import pytest
 
 from chess_core import (
-    AGENT_DELIVERY_GRACE_NS,
     DELIVERY_GRACE_NS,
     GameResult,
     STARTING_RATING,
@@ -90,23 +89,6 @@ async def test_mid_game_undelivered_is_abandonment_and_is_rated(
     history = RatingHistoryRepo(store.writer, store.executor)
     assert len(await history.list_points_for_bot(white.id)) == 1
     assert len(await history.list_points_for_bot(black.id)) == 1
-
-
-@pytest.mark.parametrize(
-    "advance,expected", [(THIRTY_SECONDS_NS, "pending"), (AGENT_DELIVERY_GRACE_NS + ONE_MS_NS, "aborted")]
-)
-async def test_an_agent_controlled_mover_gets_the_longer_grace(
-    store, deps, clock, games, bot_repo, seed_bots, make_game, advance, expected
-):
-    """30 s is the half a hard-coded DELIVERY_GRACE_NS fails."""
-    white, black = await seed_bots("white-bot", "black-bot")
-    game = await make_game(white, black)
-    async with critical_section(store.writer, store.executor):
-        await bot_repo.update_controller(white.id, "agent")
-
-    clock.advance(advance)
-    await tick(deps)
-    assert (await games.get_by_id(game.id)).status == expected
 
 
 async def test_a_delivered_position_is_never_swept(

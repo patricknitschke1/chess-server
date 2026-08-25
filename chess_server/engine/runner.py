@@ -69,12 +69,7 @@ class Flagged:
     result: GameResult
 
 
-@dataclass(frozen=True)
-class WrongController:
-    controller: str
-
-
-MoveOutcome = Applied | Rejected | NotDelivered | Flagged | WrongController
+MoveOutcome = Applied | Rejected | NotDelivered | Flagged
 
 
 
@@ -136,7 +131,6 @@ async def apply_move_locked(
     from_ply: int,
     uci: str,
     *,
-    controller: str = "client",
     client_reported_ms: Optional[int],
     now_mono: int,
 ) -> MoveOutcome:
@@ -148,10 +142,6 @@ async def apply_move_locked(
     # it between here and the CAS-UPDATE that repeats it in SQL at step 9.
     if game is None or game.ply != from_ply or game.status not in NON_TERMINAL:
         raise CASConflict(f"game {game_id} is not at ply {from_ply} and non-terminal")
-
-    mover = await bots.get_by_id(_mover_id(game))
-    if mover.controller != controller:
-        return WrongController(controller=mover.controller)
 
     if game.delivered_to_mover != 1:
         return NotDelivered(ply=game.ply, fen=game.fen, status=game.status)
@@ -250,13 +240,11 @@ async def apply_move(
     from_ply: int,
     uci: str,
     *,
-    controller: str = "client",
     client_reported_ms: Optional[int] = None,
 ) -> MoveOutcome:
     async with critical_section(deps.conn, deps.executor, deps.sink) as txn:
         return await apply_move_locked(
             deps, txn, game_id, from_ply, uci,
-            controller=controller,
             client_reported_ms=client_reported_ms,
             now_mono=deps.now_mono(),
         )

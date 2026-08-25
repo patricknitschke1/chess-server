@@ -163,7 +163,7 @@ def seed_bots(store):
     """Insert bot rows through the real repository, inside a real transaction."""
 
     async def _seed(*names, role="competitor", rating=STARTING_RATING, owner=None,
-                    is_anchor=0, controller="client"):
+                    is_anchor=0):
         bots = BotRepo(store.writer, store.executor)
         made = []
         async with critical_section(store.writer, store.executor):
@@ -176,7 +176,6 @@ def seed_bots(store):
                     rating=rating,
                     is_anchor=is_anchor,
                     created_at=WALL,
-                    controller=controller,
                 )
                 made.append(await bots.get_by_id(bot_id))
         return made

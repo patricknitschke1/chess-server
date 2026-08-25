@@ -54,10 +54,9 @@ async def test_presence_candidates_are_the_bots_that_poll(bots):
 async def test_list_pool_candidates_excludes_the_ineligible(store, bots):
     eligible = await _bot(bots, "eligible")
     seated = await _bot(bots, "seated")
-    agent = await _bot(bots, "agent", controller="agent")
     benchmark = await _bot(bots, "benchmark", role="benchmark")
     stale = await _bot(bots, "stale")
-    for bot_id in (eligible, seated, agent, benchmark):
+    for bot_id in (eligible, seated, benchmark):
         await bots.update_last_poll(bot_id, WALL, NOW)
     await bots.update_last_poll(stale, WALL, CUTOFF - 1)
     game_id = store.writer.execute(

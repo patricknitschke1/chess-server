@@ -132,26 +132,6 @@ async def test_the_side_not_to_move_is_told_so_and_nothing_is_delivered(
     assert state.mailbox == {}
 
 
-async def test_an_agent_controlled_bot_gets_no_delivery_from_this_route(
-    client, no_hold, store
-):
-    """The agent's delivery site is the MCP route, not this one."""
-    white = await register(client, "ada")
-    black = await register(client, "grace")
-    game_id = await pair(no_hold, white["bot_id"], black["bot_id"])
-    async with critical_section(store.writer, store.executor):
-        await BotRepo(store.writer, store.executor).update_controller(
-            white["bot_id"], "agent"
-        )
-
-    body = (await poll(client, white["token"])).json()
-
-    assert body == {"game_id": None, "reason": "agent_has_control"}
-    game = await GameRepo(store.reader, store.reader_executor).get_by_id(game_id)
-    assert game.turn_started_mono is None
-    assert state.mailbox == {}
-
-
 async def test_the_payload_carries_every_wire_field_and_the_game_s_own_clock(
     client, no_hold, store
 ):
@@ -169,7 +149,6 @@ async def test_the_payload_carries_every_wire_field_and_the_game_s_own_clock(
     assert body["ply"] == 0
     assert body["color"] == "white"
     assert body["history_san"] == []
-    assert body["controller"] == "client"
     assert "e2e4" in body["legal_moves"]
     assert (body["time_control_ms"], body["increment_ms"]) == (60_000, 1_000)
     assert (body["white_ms"], body["black_ms"]) == (60_000, 60_000)

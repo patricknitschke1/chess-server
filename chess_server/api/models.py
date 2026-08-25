@@ -28,7 +28,6 @@ class TurnResponse(BaseModel):
     black_ms: int
     time_control_ms: int
     increment_ms: int
-    controller: str
 
 
 class NoGameResponse(BaseModel):
@@ -60,7 +59,6 @@ class MyBotResponse(BaseModel):
     draws: int
     games_played: int
     is_provisional: bool
-    controller: str
     current_game_id: Optional[int]
 
 
@@ -88,22 +86,6 @@ class ResignResponse(BaseModel):
     status: str
     result: str
     termination: str
-
-
-class SetControlRequest(BaseModel):
-    action: str
-
-
-class SetControlResponse(BaseModel):
-    controller: str
-    message: str
-
-
-class LegalMovesResponse(BaseModel):
-    game_id: int
-    ply: int
-    legal_moves: List[str]
-    fen: str
 
 
 class LeaderboardEntry(BaseModel):

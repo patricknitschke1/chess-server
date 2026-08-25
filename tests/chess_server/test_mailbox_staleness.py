@@ -75,7 +75,7 @@ async def test_a_payload_for_a_ply_that_has_passed_is_discarded_not_served(
         color="white", fen=served["fen"], legal_moves=served["legal_moves"],
         history_san=[], white_ms=served["white_ms"], black_ms=served["black_ms"],
         time_control_ms=served["time_control_ms"],
-        increment_ms=served["increment_ms"], controller="client",
+        increment_ms=served["increment_ms"],
     )
 
     answer = (await poll(client, white["token"])).json()
@@ -100,7 +100,6 @@ async def test_a_payload_for_a_game_that_has_ended_is_discarded(
         bot_id=white["bot_id"], game_id=next_game_id, ply=0, color="white",
         fen=served["fen"], legal_moves=served["legal_moves"], history_san=[],
         white_ms=1, black_ms=1, time_control_ms=1, increment_ms=0,
-        controller="client",
     )
 
     answer = (await poll(client, white["token"])).json()

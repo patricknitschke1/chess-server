@@ -1,10 +1,4 @@
-"""`POST /games/{id}/moves` — the outcome mapping (role spec §6.1, §8.1; design §8.3).
-
-The property that matters here is not visible from a single request: `controller`
-is read **inside** the transaction that CASes, so a `release_control` committing
-while the request is in flight must be seen. `test_a_release_committing_while_the
-_request_waits_is_seen` is the only test that separates that from a pre-check.
-"""
+"""`POST /games/{id}/moves` — the outcome mapping (role spec §6.1, §8.1; design §8.3)."""
 import asyncio
 
 import pytest
@@ -147,70 +141,6 @@ async def test_an_undelivered_position_is_409_pointing_at_the_poll(
     assert response.status_code == 409
     assert "GET /bots/me/turn" in response.json()["error"]
     assert (await games.get_by_id(game_id)).status == "pending"
-
-
-async def test_an_agent_controlled_bot_is_403_with_no_strike_and_no_clock_change(
-    client, api_state, table, games, bot_repo
-):
-    white, _, game_id = table
-    before = await games.get_by_id(game_id)
-    async with critical_section(api_state.store.writer, api_state.store.executor):
-        await bot_repo.update_controller(white["bot_id"], "agent")
-
-    response = await submit(client, white["token"], game_id, 0, "e2e4")
-
-    assert response.status_code == 403
-    assert "release_control" in response.json()["error"]
-    after = await games.get_by_id(game_id)
-    assert (after.white_strikes, after.ply) == (0, 0)
-    assert after.turn_started_mono == before.turn_started_mono
-
-
-async def test_a_release_committing_while_the_request_waits_is_seen(
-    client, api_state, table, games, bot_repo, monkeypatch
-):
-    """The controller check lives inside the CAS transaction, so it must observe a
-    release that commits while the request is queued behind `write_lock`.
-
-    A pre-check reads the row fetched during authentication — before the lock, and
-    on the reader, where the uncommitted release is invisible. That mutant answers
-    `403`; this one answers `200`. No single-request test can tell them apart.
-    """
-    white, _, game_id = table
-    async with critical_section(api_state.store.writer, api_state.store.executor):
-        await bot_repo.update_controller(white["bot_id"], "agent")
-
-    authenticated = asyncio.Event()
-    real = BotRepo.get_by_token_hash
-
-    async def probe(self, token_hash):
-        row = await real(self, token_hash)
-        authenticated.set()
-        return row
-
-    monkeypatch.setattr(BotRepo, "get_by_token_hash", probe)
-
-    async def release_under_the_lock():
-        async with critical_section(
-            api_state.store.writer, api_state.store.executor
-        ) as txn:
-            await BotRepo(txn.conn, txn.executor).update_controller(
-                white["bot_id"], "client"
-            )
-            # Held until the request has authenticated, so a pre-check has already
-            # read 'agent' from a snapshot this transaction has not yet committed.
-            await authenticated.wait()
-
-    # A bound, not a wait: the release holds the writer until the request has
-    # authenticated, so a request that never authenticates would hang forever.
-    async with asyncio.timeout(GATHER_TIMEOUT_SECONDS):
-        _, response = await asyncio.gather(
-            release_under_the_lock(),
-            submit(client, white["token"], game_id, 0, "e2e4"),
-        )
-
-    assert response.status_code == 200
-    assert (await games.get_by_id(game_id)).ply == 1
 
 
 async def test_a_flagged_clock_beats_an_illegal_move(

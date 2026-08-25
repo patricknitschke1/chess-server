@@ -11,9 +11,6 @@ NO_BOT_FOR_TOKEN = "No bot registered for this token. Call register_bot first."
 RATE_LIMITED = "Rate limit exceeded."
 RETRY_AFTER_SECONDS = 3
 
-CONTROLLER_IS_AGENT = (
-    "Controller is 'agent'. Call release_control() before moving from your client."
-)
 GAME_ALREADY_ENDED = (
     "Game {game_id} is no longer at ply {ply}. It has moved on or already ended."
 )
@@ -33,15 +30,6 @@ FLAGGED = (
 )
 SEAT_HELD = "Either you or your opponent is already in a game."
 OPPONENT_NOT_FOUND = "Opponent bot not found: {name}. Check the name on /leaderboard."
-TAKE_CONTROL_WHILE_SEATED = (
-    "Cannot take control while your bot is in a game. Wait for it to finish, or resign."
-)
-CONTROLLER_IS_CLIENT = (
-    "Controller is 'client'. Call take_control() before using agent tools."
-)
-INVALID_ACTION = "Invalid action '{action}'. Must be 'take' or 'release'."
-CONTROL_TAKEN = "Control transferred to agent. Client polling is now idle."
-CONTROL_RELEASED = "Control returned to your client. It may poll and move again."
 ILLEGAL_MOVE = (
     "Illegal move '{move}'. Legal moves: {legal_moves}. Current position: {fen}"
 )

@@ -34,7 +34,6 @@ async def test_an_unseated_bot_reports_no_current_game(client):
 
     assert body["current_game_id"] is None
     assert body["role"] == "competitor"
-    assert body["controller"] == "client"
 
 
 async def test_a_seated_bot_reports_the_game_it_is_seated_in(

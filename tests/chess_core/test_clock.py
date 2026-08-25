@@ -373,8 +373,6 @@ def test_constants_exist():
     assert clock.EXHIBITION_TIME_CONTROL_NS == 300_000_000_000
     assert clock.EXHIBITION_INCREMENT_NS == 10_000_000_000
     assert clock.DELIVERY_GRACE_NS == 15_000_000_000
-    assert clock.AGENT_DELIVERY_GRACE_NS == 60_000_000_000
-    assert clock.AGENT_AUTO_RELEASE_NS == 45_000_000_000
     assert clock.POLL_RECENCY_NS == 5_000_000_000
     assert clock.POLL_HOLD_NS == 20_000_000_000
     assert clock.TICK_INTERVAL_NS == 1_000_000_000
@@ -394,8 +392,6 @@ def test_clock_is_the_sole_declaration_site_for_its_constants():
         "EXHIBITION_TIME_CONTROL_NS",
         "EXHIBITION_INCREMENT_NS",
         "DELIVERY_GRACE_NS",
-        "AGENT_DELIVERY_GRACE_NS",
-        "AGENT_AUTO_RELEASE_NS",
         "POLL_RECENCY_NS",
         "POLL_HOLD_NS",
         "TICK_INTERVAL_NS",

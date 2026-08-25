@@ -57,8 +57,8 @@ async def test_a_conflicted_unit_rolls_its_rows_back_but_not_its_neighbours(deps
                     txn.executor,
                     lambda: txn.conn.execute(
                         "INSERT INTO bots (name, owner, token_hash, role, rating, is_anchor,"
-                        " controller, created_at) VALUES (?, ?, ?, 'competitor', 1000, 0,"
-                        " 'client', '2026-08-24T00:00:00Z')",
+                        " created_at) VALUES (?, ?, ?, 'competitor', 1000, 0,"
+                        " '2026-08-24T00:00:00Z')",
                         (name, name, f"hash-{name}"),
                     ),
                 )

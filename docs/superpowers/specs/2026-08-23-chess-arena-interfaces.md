@@ -427,7 +427,7 @@ def check_delivery_timeout(
     Args:
         clock: Current clock state
         now_mono: Current monotonic time in nanoseconds
-        grace_ns: Grace period in nanoseconds (DELIVERY_GRACE_NS or AGENT_DELIVERY_GRACE_NS)
+        grace_ns: Grace period in nanoseconds (DELIVERY_GRACE_NS)
     
     Returns:
         True if delivered_to_mover=0 and (now_mono - to_move_since_mono) > grace_ns
@@ -455,8 +455,6 @@ RATED_INCREMENT_NS: int = 2_000_000_000       # 2 seconds
 EXHIBITION_TIME_CONTROL_NS: int = 300_000_000_000  # 5 minutes
 EXHIBITION_INCREMENT_NS: int = 10_000_000_000      # 10 seconds
 DELIVERY_GRACE_NS: int = 15_000_000_000       # 15 seconds
-AGENT_DELIVERY_GRACE_NS: int = 60_000_000_000 # 60 seconds
-AGENT_AUTO_RELEASE_NS: int = 45_000_000_000   # 45 seconds
 POLL_RECENCY_NS: int = 5_000_000_000          # pool eligibility window (§9.1)
 POLL_HOLD_NS: int = 20_000_000_000            # server long-poll hold (§8.4)
 TICK_INTERVAL_NS: int = 1_000_000_000         # ticker period (§4.6)

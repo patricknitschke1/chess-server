@@ -68,10 +68,8 @@ async def _dirty_database(repos):
             rating=STARTING_RATING,
             is_anchor=0,
             created_at=WALL,
-            controller="agent" if name == "agent_bot" else "client",
         )
         await bots.update_last_poll(bot_id, WALL, OLD_MONO)
-        await bots.update_last_agent_action(bot_id, OLD_MONO)
         made[name] = await bots.get_by_id(bot_id)
 
     game_ids = {}
@@ -151,16 +149,6 @@ async def test_every_seat_is_freed(repos, recovered):
 async def test_last_poll_mono_is_null_for_every_bot(store, recovered):
     rows = store.reader.execute("SELECT last_poll_mono FROM bots").fetchall()
     assert rows and all(row["last_poll_mono"] is None for row in rows)
-
-
-async def test_last_agent_action_mono_is_null_for_every_bot(store, recovered):
-    rows = store.reader.execute("SELECT last_agent_action_mono FROM bots").fetchall()
-    assert rows and all(row["last_agent_action_mono"] is None for row in rows)
-
-
-async def test_control_returns_to_the_client_for_every_bot(store, recovered):
-    rows = store.reader.execute("SELECT controller FROM bots").fetchall()
-    assert rows and all(row["controller"] == "client" for row in rows)
 
 
 async def test_a_new_run_starts_and_is_announced_after_the_commit(recovered):

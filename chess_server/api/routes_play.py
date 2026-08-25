@@ -1,4 +1,4 @@
-"""Play routes: move submission (role spec §6.1, §8.1; design §8.3, §13.3).
+"""Play routes: move submission (role spec §6.1, §8.1; design §8.3).
 
 One outer `apply_move` per request. The route opens no critical section of its
 own — a second transaction here would be a second chance for the position to
@@ -6,13 +6,11 @@ move underneath the first.
 """
 from fastapi import APIRouter, Depends, Request, status
 
-from chess_core import Color, get_legal_moves
+from chess_core import Color
 
 from chess_server.api.auth import require_bot
 from chess_server.api.errors import (
     CAS_CONFLICT,
-    CONTROLLER_IS_AGENT,
-    CONTROLLER_IS_CLIENT,
     FLAGGED,
     GAME_ALREADY_ENDED,
     GAME_NOT_FOUND,
@@ -23,29 +21,24 @@ from chess_server.api.errors import (
     ApiError,
 )
 from chess_server.api.models import (
-    LegalMovesResponse,
     ResignRequest,
     ResignResponse,
     SubmitMoveRequest,
     SubmitMoveResponse,
 )
 from chess_server.api.state import AppState, get_state
-from chess_server.engine import games as games_module
 from chess_server.engine.games import ResignRefused, resign_game
-from chess_server.engine.mailbox import deliver_for_poll
 from chess_server.engine.runner import (
     Applied,
     Flagged,
     MoveOutcome,
     NotDelivered,
     Rejected,
-    WrongController,
     apply_move,
 )
 from chess_server.store.cas import CASConflict
-from chess_server.store.repositories import NON_TERMINAL, BotRepo, GameRepo, SeatRepo
+from chess_server.store.repositories import NON_TERMINAL, GameRepo, SeatRepo
 from chess_server.store.rows import BotRow, GameRow
-from chess_server.store.txn import critical_section
 
 router = APIRouter()
 
@@ -71,8 +64,7 @@ async def _mover_seat(
     mover. When the game has moved on this says nothing and defers to the CAS, so a
     move that raced the opponent's — or arrived after the game ended, when the seats
     are already gone — gets design §8.3's `409` (discard and re-poll) rather than a
-    `403` that reads like an authorisation fault. `controller` gets no such pin,
-    which is why it is checked inside the transaction (design §13.3).
+    `403` that reads like an authorisation fault.
     """
     game = await _load_game(app_state, game_id)
     if game.ply != from_ply or game.status not in NON_TERMINAL:
@@ -111,8 +103,6 @@ def _outcome_response(
             {"legal_moves": outcome.legal_moves, "fen": outcome.fen,
              "strikes": outcome.strikes, "forfeited": outcome.forfeited},
         )
-    if isinstance(outcome, WrongController):
-        raise ApiError(status.HTTP_403_FORBIDDEN, CONTROLLER_IS_AGENT)
     if isinstance(outcome, NotDelivered):
         raise ApiError(
             status.HTTP_409_CONFLICT, NOT_DELIVERED,
@@ -147,7 +137,6 @@ async def submit_move(
     try:
         outcome = await apply_move(
             app_state.deps, game_id, payload.ply, payload.move,
-            controller="client",
             client_reported_ms=payload.client_reported_ms,
         )
     except CASConflict:
@@ -167,9 +156,7 @@ async def resign(
     app_state = get_state(request)
     game = await _load_game(app_state, game_id)
     try:
-        outcome = await resign_game(
-            app_state.deps, game_id, bot.id, payload.ply, controller="client"
-        )
+        outcome = await resign_game(app_state.deps, game_id, bot.id, payload.ply)
     except CASConflict:
         game = await _load_game(app_state, game_id)
         raise ApiError(
@@ -179,10 +166,7 @@ async def resign(
         )
     if isinstance(outcome, ResignRefused):
         raise ApiError(
-            status.HTTP_403_FORBIDDEN,
-            NOT_IN_GAME.format(game_id=game_id)
-            if outcome.reason == games_module.NOT_IN_GAME
-            else CONTROLLER_IS_AGENT,
+            status.HTTP_403_FORBIDDEN, NOT_IN_GAME.format(game_id=game_id)
         )
     return ResignResponse(
         game_id=outcome.id,
@@ -190,48 +174,3 @@ async def resign(
         result=outcome.result,
         termination=outcome.termination,
     )
-
-
-@router.get("/games/{game_id}/legal_moves", response_model=LegalMovesResponse)
-async def get_legal_moves_route(
-    game_id: int, request: Request, bot: BotRow = Depends(require_bot)
-):
-    """The agent's delivery site (role spec §5.2, design §6.2).
-
-    Read-only in name only: while `controller='agent'` this is where the position
-    is delivered, and delivery starts a clock. `GET /games/{id}` is the read that
-    never delivers.
-    """
-    app_state = get_state(request)
-    game = await _load_game(app_state, game_id)
-    if bot.controller != "agent":
-        raise ApiError(status.HTTP_403_FORBIDDEN, CONTROLLER_IS_CLIENT)
-    seat = await SeatRepo(
-        app_state.store.reader, app_state.store.reader_executor
-    ).get_seat(bot.id)
-    if seat is None or seat.game_id != game_id:
-        raise ApiError(status.HTTP_403_FORBIDDEN, NOT_IN_GAME.format(game_id=game_id))
-
-    mover_id = game.white_bot_id if game.to_move == Color.WHITE.value else game.black_bot_id
-    if game.status in NON_TERMINAL and mover_id == bot.id:
-        # Idempotent by §6.2's `delivered_to_mover = 0` predicate: a second call
-        # returns the identical position and does not restart the clock.
-        game = await deliver_for_poll(app_state.deps, bot.id) or game
-    await _record_agent_action(app_state, bot.id)
-    return LegalMovesResponse(
-        game_id=game.id,
-        ply=game.ply,
-        legal_moves=get_legal_moves(game.fen),
-        fen=game.fen,
-    )
-
-
-async def _record_agent_action(app_state: AppState, bot_id: int) -> None:
-    """§7.5's auto-release is keyed on this, so an agent that is working must not
-    be released mid-thought."""
-    async with critical_section(
-        app_state.store.writer, app_state.store.executor, app_state.deps.sink
-    ) as txn:
-        await BotRepo(txn.conn, txn.executor).update_last_agent_action(
-            bot_id, app_state.deps.now_mono()
-        )

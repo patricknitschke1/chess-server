@@ -108,12 +108,11 @@ class BotRepo(_Repo):
         rating: int,
         is_anchor: int,
         created_at: str,
-        controller: str = "client",
     ) -> int:
         cursor = await self._write(
             "INSERT INTO bots (name, owner, token_hash, role, rating, is_anchor,"
-            " controller, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            (name, owner, token_hash, role, rating, is_anchor, controller, created_at),
+            " created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (name, owner, token_hash, role, rating, is_anchor, created_at),
         )
         return cursor.lastrowid
 
@@ -137,9 +136,6 @@ class BotRepo(_Repo):
                 (owner,),
             ),
         )
-
-    async def update_controller(self, bot_id: int, controller: str) -> None:
-        await self._write("UPDATE bots SET controller = ? WHERE id = ?", (controller, bot_id))
 
     async def update_token_hash(self, bot_id: int, token_hash: str) -> None:
         await self._write("UPDATE bots SET token_hash = ? WHERE id = ?", (token_hash, bot_id))
@@ -171,19 +167,11 @@ class BotRepo(_Repo):
             (poll_at, poll_mono, bot_id),
         )
 
-    async def update_last_agent_action(self, bot_id: int, action_mono: int) -> None:
-        await self._write(
-            "UPDATE bots SET last_agent_action_mono = ? WHERE id = ?", (action_mono, bot_id)
-        )
-
     async def clear_monotonic_state(self) -> int:
         """§7.1 step 4. A monotonic value from a dead process is not merely stale: if
         the new baseline is lower, every bot ever registered looks like it is polling
         right now, and they churn through no_show aborts with nothing logged."""
-        cursor = await self._write(
-            "UPDATE bots SET last_poll_mono = NULL, last_agent_action_mono = NULL,"
-            " controller = 'client'"
-        )
+        cursor = await self._write("UPDATE bots SET last_poll_mono = NULL")
         return cursor.rowcount
 
     async def list_leaderboard(self) -> list[BotRow]:
@@ -207,17 +195,11 @@ class BotRepo(_Repo):
             "SELECT * FROM bots WHERE is_anchor = 1 ORDER BY id"
         )]
 
-    async def list_agent_controlled(self) -> list[BotRow]:
-        return [from_row(BotRow, row) for row in await self._all(
-            "SELECT * FROM bots WHERE controller = 'agent' ORDER BY id"
-        )]
-
     async def list_pool_candidates(self, cutoff_mono: int) -> list[BotRow]:
         """§9.1. Recency applies to competitors only — an anchor never polls."""
         rows = await self._all(
             "SELECT b.* FROM bots b"
             " WHERE b.role IN ('competitor', 'anchor')"
-            "   AND b.controller = 'client'"
             "   AND NOT EXISTS (SELECT 1 FROM seats s WHERE s.bot_id = b.id)"
             "   AND (b.role <> 'competitor'"
             "        OR (b.last_poll_mono IS NOT NULL AND b.last_poll_mono >= ?))"

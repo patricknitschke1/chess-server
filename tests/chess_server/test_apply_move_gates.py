@@ -14,7 +14,6 @@ from chess_server.engine.games import create_game_locked
 from chess_server.engine.runner import (
     Flagged,
     NotDelivered,
-    WrongController,
     apply_move_locked,
     deliver_position,
 )
@@ -42,13 +41,12 @@ async def _game(store, deps, seed_bots, *, deliver=True):
     return white, black, await GameRepo(store.writer, store.executor).get_by_id(game_id)
 
 
-async def _apply(store, deps, game, uci, *, from_ply=None, controller="client"):
+async def _apply(store, deps, game, uci, *, from_ply=None):
     async with critical_section(store.writer, store.executor, deps.sink) as txn:
         return await apply_move_locked(
             deps, txn, game.id,
             from_ply if from_ply is not None else game.ply,
             uci,
-            controller=controller,
             client_reported_ms=None,
             now_mono=deps.now_mono(),
         )
@@ -62,22 +60,6 @@ async def test_a_stale_ply_conflicts_and_leaves_the_game_alone(store, deps, seed
 
     after = await GameRepo(store.writer, store.executor).get_by_id(game.id)
     assert (after.ply, after.fen, after.status) == (game.ply, game.fen, game.status)
-
-
-async def test_a_controller_change_committed_after_the_read_still_refuses(
-    store, deps, seed_bots
-):
-    """Authorisation is checked in this transaction, never as a pre-check."""
-    white, _, game = await _game(store, deps, seed_bots)
-    async with critical_section(store.writer, store.executor, deps.sink) as txn:
-        await BotRepo(txn.conn, txn.executor).update_controller(white.id, "agent")
-
-    outcome = await _apply(store, deps, game, LEGAL, controller="client")
-
-    after = await GameRepo(store.writer, store.executor).get_by_id(game.id)
-    assert isinstance(outcome, WrongController)
-    assert outcome.controller == "agent"
-    assert (after.ply, after.fen) == (game.ply, game.fen)
 
 
 async def test_an_undelivered_position_is_refused_and_never_delivered(

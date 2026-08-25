@@ -19,8 +19,6 @@ class BotRow:
     losses: int
     draws: int
     games_played: int
-    controller: str
-    last_agent_action_mono: Optional[int]
     last_poll_at: Optional[str]
     last_poll_mono: Optional[int]
     last_color: Optional[str]
