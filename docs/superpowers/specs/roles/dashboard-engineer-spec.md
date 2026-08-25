@@ -18,7 +18,7 @@
 > **Where the built server contradicts this document, the built server wins.** As built:
 > - SSE frames carry a named `event:` field, so `EventSource.onmessage` never fires. §4's example is wrong; the client registers one `addEventListener` per event type.
 > - `move_played` for non-featured games is coalesced to 2 Hz, so **seq gaps are normal** and cannot mean "resynchronise". Boards are therefore always rendered from the event's `fen`, never by applying moves, and resync is driven by `run` change, disconnect, an unknown `game_id`, and a 15s `/state` refresh. The 15s refresh is also what re-runs the server's featured selection, which is only recomputed inside `GET /state`.
-> - Competitor-vs-competitor games are created with `rated: false`; only games against an anchor move a rating. The rated/unrated colour split in the ticker is therefore **live, not cut** — the reduction note above is wrong on that point.
+> - Competitor-vs-competitor games **are** rated. `rated_at_creation` returns 0 only when the two bots share an `owner` (design §5.3 same-owner rule); finalisation additionally unrates `no_show`, `server_restart` and `admin_abort`. The rated/unrated colour split stays live, but unrated is the rare case — do not design the screen around it. (An earlier note here claimed competitor games were unrated; that came from a test run where every bot was registered under one owner, so every pairing self-matched.)
 > - `result` is `white_win` / `black_win` / `draw`, not `1-0` / `0-1` / `1/2-1/2`.
 > - `game_created` and `game_started` carry no FEN or ratings, so a newly seen game is filled in from `/state` rather than from the event.
 >
