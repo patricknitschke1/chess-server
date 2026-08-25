@@ -34,6 +34,12 @@ SEAT_HELD = "Either you or your opponent is already in a game."
 TAKE_CONTROL_WHILE_SEATED = (
     "Cannot take control while your bot is in a game. Wait for it to finish, or resign."
 )
+CONTROLLER_IS_CLIENT = (
+    "Controller is 'client'. Call take_control() before using agent tools."
+)
+INVALID_ACTION = "Invalid action '{action}'. Must be 'take' or 'release'."
+CONTROL_TAKEN = "Control transferred to agent. Client polling is now idle."
+CONTROL_RELEASED = "Control returned to your client. It may poll and move again."
 ILLEGAL_MOVE = (
     "Illegal move '{move}'. Legal moves: {legal_moves}. Current position: {fen}"
 )

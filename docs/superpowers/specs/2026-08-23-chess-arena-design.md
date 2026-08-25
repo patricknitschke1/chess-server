@@ -388,6 +388,7 @@ GET  /bots/me/turn             long-poll, holds up to 20s; DELIVERS (§6.2)
 POST /bots/me/control          {action: "take" | "release"} -> {controller}
 POST /games/{id}/moves         {ply, move, client_reported_ms?}
 POST /games/{id}/resign        {ply}
+GET  /games/{id}/legal_moves   agent-only; DELIVERS (§6.2, §13.3)
 GET  /games/{id}/moves         move list with timings, for analyze_game
 POST /challenges               {opponent, time_control?}
 POST /challenges/{id}/accept   {}
@@ -407,6 +408,8 @@ GET  /bots/{bot_id}/arena-reports  -> [{id, created_at, candidate_name, ...}]
 ```
 
 **Every route above is owned and implemented by `server-engineer`.** Revision 4 left `POST /bots/me/control`, `GET /bots/me`, `GET /games/{id}/moves` and `GET /bots/{bot_id}/rating_history` described only in the MCP and interfaces documents — so the surface §13.3 depends on was owned by the one track forbidden from writing routes. `mcp-engineer` owns the *tool* surface and consumes these; it never implements them.
+
+`GET /games/{id}/legal_moves` was in no inventory at all until phase 3c, while §6.2, §13.3 and the MCP `get_legal_moves()` tool all required the behaviour behind it: it is the **agent's delivery site**, the counterpart to the long-poll. Its read-only name is misleading and deliberately so-noted — it moves a game `pending → active` and starts a clock.
 
 All authenticated endpoints use `Authorization: Bearer <token>` (§16.2).
 

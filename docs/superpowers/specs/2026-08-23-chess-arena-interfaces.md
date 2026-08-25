@@ -1418,6 +1418,30 @@ class NoGameResponse(BaseModel):
   from, and `server_elapsed_ms` versus `client_reported_ms` is what distinguishes a slow
   bot from a slow network.
 
+**GET /games/{id}/legal_moves**
+- **Authenticated**
+- **Response (200):** `LegalMovesResult` (Part 6), served as
+  ```python
+  class LegalMovesResponse(BaseModel):
+      game_id: int
+      ply: int
+      legal_moves: List[str]  # UCI notation, sorted
+      fen: str
+  ```
+- **Errors:**
+  - `401` — ErrorResponse: "No bot registered for this token. Call register_bot first."
+  - `403` — ErrorResponse: "Controller is 'client'. Call take_control() before using agent tools."
+  - `403` — ErrorResponse: "Your bot is not a player in game {game_id}."
+  - `404` — ErrorResponse: "Game {game_id} not found."
+  - `429` — ErrorResponse: "Rate limit exceeded", Retry-After header
+
+  This is the **agent's delivery site** (design §6.2, §13.3): when `controller='agent'`
+  and the caller is the side to move, it performs the §6.2 delivery, which moves the
+  game `pending → active` and starts the clock. Re-reading is free and does not restart
+  it. It also refreshes `last_agent_action_mono`, so an agent that is thinking is not
+  auto-released mid-thought. `GET /games/{id}` never delivers; this route does, and the
+  read-only-looking name is why that distinction is stated twice.
+
 ### Resignation
 
 **POST /games/{id}/resign**

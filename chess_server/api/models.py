@@ -84,3 +84,19 @@ class ResignResponse(BaseModel):
     status: str
     result: str
     termination: str
+
+
+class SetControlRequest(BaseModel):
+    action: str
+
+
+class SetControlResponse(BaseModel):
+    controller: str
+    message: str
+
+
+class LegalMovesResponse(BaseModel):
+    game_id: int
+    ply: int
+    legal_moves: List[str]
+    fen: str

@@ -6,12 +6,13 @@ move underneath the first.
 """
 from fastapi import APIRouter, Depends, Request, status
 
-from chess_core import Color
+from chess_core import Color, get_legal_moves
 
 from chess_server.api.auth import require_bot
 from chess_server.api.errors import (
     CAS_CONFLICT,
     CONTROLLER_IS_AGENT,
+    CONTROLLER_IS_CLIENT,
     FLAGGED,
     GAME_ALREADY_ENDED,
     GAME_NOT_FOUND,
@@ -22,6 +23,7 @@ from chess_server.api.errors import (
     ApiError,
 )
 from chess_server.api.models import (
+    LegalMovesResponse,
     ResignRequest,
     ResignResponse,
     SubmitMoveRequest,
@@ -30,6 +32,7 @@ from chess_server.api.models import (
 from chess_server.api.state import AppState, get_state
 from chess_server.engine import games as games_module
 from chess_server.engine.games import ResignRefused, resign_game
+from chess_server.engine.mailbox import deliver_for_poll
 from chess_server.engine.runner import (
     Applied,
     Flagged,
@@ -40,8 +43,9 @@ from chess_server.engine.runner import (
     apply_move,
 )
 from chess_server.store.cas import CASConflict
-from chess_server.store.repositories import NON_TERMINAL, GameRepo, SeatRepo
+from chess_server.store.repositories import NON_TERMINAL, BotRepo, GameRepo, SeatRepo
 from chess_server.store.rows import BotRow, GameRow
+from chess_server.store.txn import critical_section
 
 router = APIRouter()
 
@@ -186,3 +190,48 @@ async def resign(
         result=outcome.result,
         termination=outcome.termination,
     )
+
+
+@router.get("/games/{game_id}/legal_moves", response_model=LegalMovesResponse)
+async def get_legal_moves_route(
+    game_id: int, request: Request, bot: BotRow = Depends(require_bot)
+):
+    """The agent's delivery site (role spec §5.2, design §6.2).
+
+    Read-only in name only: while `controller='agent'` this is where the position
+    is delivered, and delivery starts a clock. `GET /games/{id}` is the read that
+    never delivers.
+    """
+    app_state = get_state(request)
+    game = await _load_game(app_state, game_id)
+    if bot.controller != "agent":
+        raise ApiError(status.HTTP_403_FORBIDDEN, CONTROLLER_IS_CLIENT)
+    seat = await SeatRepo(
+        app_state.store.reader, app_state.store.reader_executor
+    ).get_seat(bot.id)
+    if seat is None or seat.game_id != game_id:
+        raise ApiError(status.HTTP_403_FORBIDDEN, NOT_IN_GAME.format(game_id=game_id))
+
+    mover_id = game.white_bot_id if game.to_move == Color.WHITE.value else game.black_bot_id
+    if game.status in NON_TERMINAL and mover_id == bot.id:
+        # Idempotent by §6.2's `delivered_to_mover = 0` predicate: a second call
+        # returns the identical position and does not restart the clock.
+        game = await deliver_for_poll(app_state.deps, bot.id) or game
+    await _record_agent_action(app_state, bot.id)
+    return LegalMovesResponse(
+        game_id=game.id,
+        ply=game.ply,
+        legal_moves=get_legal_moves(game.fen),
+        fen=game.fen,
+    )
+
+
+async def _record_agent_action(app_state: AppState, bot_id: int) -> None:
+    """§7.5's auto-release is keyed on this, so an agent that is working must not
+    be released mid-thought."""
+    async with critical_section(
+        app_state.store.writer, app_state.store.executor, app_state.deps.sink
+    ) as txn:
+        await BotRepo(txn.conn, txn.executor).update_last_agent_action(
+            bot_id, app_state.deps.now_mono()
+        )

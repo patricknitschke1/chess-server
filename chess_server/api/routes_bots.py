@@ -9,10 +9,14 @@ from chess_core import STARTING_RATING
 
 from chess_server.api.auth import enforce_register_limit, hash_token, require_bot
 from chess_server.api.errors import (
+    CONTROL_RELEASED,
+    CONTROL_TAKEN,
+    INVALID_ACTION,
     INVALID_JOIN_CODE,
     INVALID_ROLE,
     NAME_TAKEN,
     SECOND_COMPETITOR,
+    TAKE_CONTROL_WHILE_SEATED,
     ApiError,
 )
 from chess_server.api.models import (
@@ -20,6 +24,8 @@ from chess_server.api.models import (
     NoGameResponse,
     RegisterBotRequest,
     RegisterBotResponse,
+    SetControlRequest,
+    SetControlResponse,
     TurnResponse,
 )
 from chess_server.api.state import AppState, get_state
@@ -173,15 +179,20 @@ async def _resolve_turn(
     conn, executor = app_state.store.reader, app_state.store.reader_executor
     # Re-read the bot: `controller` can flip to 'agent' while a poll is held.
     bot = await BotRepo(conn, executor).get_by_id(bot_id)
+    if bot is None:
+        return None
+    # Before the seat: `take` is refused while seated, so the poll this wakes is
+    # necessarily an unseated one, and "waiting_for_pairing" would be a lie —
+    # matchmaking skips agent-controlled bots (design §13.3).
+    if bot.controller != "client":
+        return NoGameResponse(reason=AGENT_HAS_CONTROL)
     seat = await SeatRepo(conn, executor).get_seat(bot_id)
-    if bot is None or seat is None:
+    if seat is None:
         return None
     games = GameRepo(conn, executor)
     game = await games.get_by_id(seat.game_id)
     if game is None or game.status not in NON_TERMINAL:
         return None
-    if bot.controller != "client":
-        return NoGameResponse(reason=AGENT_HAS_CONTROL)
 
     # Before the turn check, so a payload left over from an earlier ply is
     # discarded rather than left to be drained by the next poll (§5.3).
@@ -225,3 +236,48 @@ async def get_turn(request: Request, bot: BotRow = Depends(require_bot)):
         return answer if answer is not None else await _no_seat_reason(app_state, bot)
     finally:
         app_state.waiters.discard(bot.id, waiter)
+
+
+TAKE = "take"
+RELEASE = "release"
+
+
+@router.post("/bots/me/control", response_model=SetControlResponse)
+async def set_control(
+    payload: SetControlRequest, request: Request, bot: BotRow = Depends(require_bot)
+):
+    """Design §13.3. One critical section for the seat read, the `controller` write
+    and `last_agent_action_mono`, so a pairing cannot land between them.
+
+    No CAS on `controller`: taking control twice is idempotent by design, and a
+    from-state predicate would turn the second call into a `409` for an agent that
+    is doing nothing wrong. The transaction is what serialises this, not the CAS.
+    """
+    app_state = get_state(request)
+    if payload.action not in (TAKE, RELEASE):
+        raise ApiError(
+            status.HTTP_400_BAD_REQUEST, INVALID_ACTION.format(action=payload.action)
+        )
+    async with critical_section(
+        app_state.store.writer, app_state.store.executor, app_state.deps.sink
+    ) as txn:
+        bots = BotRepo(txn.conn, txn.executor)
+        if payload.action == TAKE:
+            # Seat-held, not "a rated game in progress": `rated` can still be
+            # revised at termination, and "in progress" is undefined for `pending`.
+            if await SeatRepo(txn.conn, txn.executor).get_seat(bot.id) is not None:
+                raise ApiError(
+                    status.HTTP_409_CONFLICT, TAKE_CONTROL_WHILE_SEATED
+                )
+        controller = "agent" if payload.action == TAKE else "client"
+        await bots.update_controller(bot.id, controller)
+        # Written on release too: it is an agent tool call, and leaving it stale
+        # would auto-release the next `take` on the tick after it landed.
+        await bots.update_last_agent_action(bot.id, app_state.deps.now_mono())
+        # Deferred: a held poll must not be told control moved by a transaction
+        # that then rolls back. Nothing here touches the clock (design §13.3).
+        txn.defer(lambda: app_state.waiters.wake(bot.id))
+    return SetControlResponse(
+        controller=controller,
+        message=CONTROL_TAKEN if payload.action == TAKE else CONTROL_RELEASED,
+    )
