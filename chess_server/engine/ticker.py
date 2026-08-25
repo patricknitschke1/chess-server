@@ -388,6 +388,9 @@ async def _tick_once(
 
 async def run_ticker(deps: EngineDeps, metrics: TickerMetrics) -> None:
     """Never exits. A tick that raises is logged and the next one still runs."""
+    # Seeded before the loop: 0 reads as infinitely stale, so a supervisor step
+    # landing before the first completed tick would restart a healthy ticker.
+    metrics.last_tick_mono = deps.now_mono()
     while True:
         try:
             await _tick_once(deps, metrics)

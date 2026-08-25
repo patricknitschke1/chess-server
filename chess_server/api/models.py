@@ -254,3 +254,17 @@ class DashboardStateResponse(BaseModel):
     active_games: List[ActiveGameSummary]
     leaderboard: List[LeaderboardEntry]
     featured_game_id: Optional[int]
+
+
+class HealthResponse(BaseModel):
+    last_tick_age_ms: int
+    last_tick_duration_ms: int
+    active_games: int
+    pending_games: int
+    stalled_games: int
+    pooled_bots: int
+    held_polls: int
+    sse_clients: int
+    db_writable: bool
+    consecutive_tick_errors: int
+    ticker_restarts: int

@@ -13,7 +13,13 @@ from typing import AsyncIterator, Optional
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
-from chess_server.api import routes_bots, routes_challenges, routes_play, routes_public
+from chess_server.api import (
+    health,
+    routes_bots,
+    routes_challenges,
+    routes_play,
+    routes_public,
+)
 from chess_server.api.errors import ApiError
 from chess_server.api.settings import Settings
 from chess_server.api.state import AppState
@@ -44,6 +50,7 @@ def start_supervisor(app_state: AppState) -> asyncio.Task:
         metrics=app_state.metrics,
         spawn=lambda: start_ticker(app_state),
         task=app_state.ticker_task,
+        on_health=lambda: health.publish_health_tick(app_state),
     )
     app_state.supervisor_task = asyncio.create_task(
         run_supervisor(supervisor), name="supervisor"
@@ -93,6 +100,7 @@ def create_app(app_state: AppState) -> FastAPI:
     app.include_router(routes_play.router)
     app.include_router(routes_challenges.router)
     app.include_router(routes_public.router)
+    app.include_router(health.router)
 
     @app.exception_handler(ApiError)
     async def _api_error(request: Request, exc: ApiError) -> JSONResponse:

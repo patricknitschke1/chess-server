@@ -33,6 +33,13 @@ def current_seq() -> int:
     return _next_seq - 1
 
 
+def take_seq() -> int:
+    """For the one event that belongs to no transaction. `health_tick` reports
+    process state and must be visible while the writer is busy; everything else
+    goes through `Txn.emit` and is invisible until its transaction commits."""
+    return _take_seq()
+
+
 def _drop(seq: int, event_type: str, data: dict) -> None:
     pass
 

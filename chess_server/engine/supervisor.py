@@ -9,7 +9,7 @@ contending for the same write lock.
 import asyncio
 import logging
 from dataclasses import dataclass, field
-from typing import Callable
+from typing import Awaitable, Callable, Optional
 
 from chess_core import is_within
 
@@ -35,9 +35,17 @@ class Supervisor:
     spawn: Callable[[], asyncio.Task]
     task: asyncio.Task
     cancel_wait: float = field(default=CANCEL_WAIT_SECONDS)
+    # Supplied by the app; the emission site stays here because §8.4 pins it to
+    # the supervisor's cadence and nothing else runs on that cadence.
+    on_health: Optional[Callable[[], Awaitable[None]]] = None
 
     async def step(self) -> None:
         """One decision. The loop is elsewhere so tests never sleep to observe it."""
+        await self._decide()
+        if self.on_health is not None:
+            await self.on_health()
+
+    async def _decide(self) -> None:
         now_mono = self.deps.now_mono()
         if is_within(self.metrics.last_tick_mono, now_mono, TICK_WARN_NS):
             return
