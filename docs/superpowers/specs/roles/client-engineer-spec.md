@@ -207,7 +207,6 @@ class ChessClient:
         name: str,
         owner: str,
         join_code: str,
-        role: str = "competitor"
     ) -> str:
         """Register a new bot per Interfaces Part 5.
         
@@ -219,7 +218,6 @@ class ChessClient:
     def run(
         self,
         choose_move_fn: Callable[[chess.Board, ClockView], chess.Move],
-        idle_on_control_handoff: bool = True
     ) -> None:
         """Main bot loop per §8 protocol.
         
@@ -230,7 +228,6 @@ class ChessClient:
         - On 200: continue
         - On 409: discard move, re-poll (NEVER retry same move — that's a hot loop per §8.3)
         - On 400 (illegal): log full error with legal moves and position, re-poll
-        - On "agent_has_control": log one line, poll until released
         - On "superseded": silent re-poll
         - On network error: exponential backoff, max 5s
         
@@ -238,9 +235,7 @@ class ChessClient:
         """
         ...
     
-    def challenge(self, opponent_name: str, time_control: str = "rated") -> int:
-        """POST /challenges per Interfaces Part 5."""
-        ...
+    # CUT (design §12): challenge() removed with challenges.
     
     def resign(self, game_id: int, ply: int) -> None:
         """POST /games/{id}/resign per Interfaces Part 5."""
@@ -274,17 +269,7 @@ if response.status_code == 429:
     raise RateLimited(f"Rate limited. Retry after {retry_after}s")
 ```
 
-**Agent control per §13.3:**
-
-```python
-if turn_data['controller'] == 'agent':
-    if idle_on_control_handoff:
-        print("Agent has control. Waiting for release...")
-        # Poll every 2s until controller returns to 'client'
-        # Do NOT log repeatedly; one line is enough
-    else:
-        raise ClientError("Agent has control but idle_on_control_handoff=False")
-```
+**Agent control per §13.3:** CUT. There is no `controller` field and no handoff.
 
 ### 3.3 `run.py` — CLI entrypoint
 
@@ -294,9 +279,6 @@ python run.py --register --name MyBot --owner alice --server http://localhost:80
 
 # Normal run (reads token from .env)
 python run.py
-
-# Challenge another bot
-python run.py --challenge BetaBot --time-control exhibition
 
 # Resign current game
 python run.py --resign
@@ -468,7 +450,7 @@ These are invariants you uphold. Violating any of them fails the track.
 
 4. **409 means discard and re-poll per §8.3.** Never retry the same move; that is an accidental hot loop. The correct response to a CAS conflict is to throw away the move you just tried and ask for the current position.
 
-5. **Agent control means idle, not error per §13.3.** On `controller: "agent"`, log one clear line (`"Agent has control. Waiting for release..."`) and poll silently every 2s. Do not spew repeated "waiting" messages. Silence is the signal that the SDK is behaving correctly.
+5. **CUT (design §13.3):** agent control handoff. There is no `controller` field.
 
 6. **The arena randomises openings, seeded per §17.** Two deterministic bots otherwise replay one identical game, making "100 games" a statistical illusion. Opening randomisation is mandatory, not optional.
 
@@ -524,14 +506,13 @@ Endpoints the SDK calls:
 - `GET /bots/me/turn` — long-poll, returns `TurnResponse | NoGameResponse`
 - `POST /games/{id}/moves` — submit move with `{ply, move, client_reported_ms?}`
 - `POST /games/{id}/resign` — resign with `{ply}`
-- `POST /challenges` — create challenge
-- `POST /challenges/{id}/accept`, `/decline` — respond to challenge
-- `GET /challenges` — inbox
+
+CUT (design §12): `/challenges*`. The SDK has no challenge surface.
 
 Error shapes per Interfaces Part 5:
 - `400` — ErrorResponse with `error` field and optional `details` dict
 - `401` — token invalid or missing
-- `403` — controller mismatch or not your turn
+- `403` — not your turn
 - `409` — CAS conflict, includes `ply`, `fen`, `status` in details
 - `429` — rate limited, includes `Retry-After` header
 
@@ -722,16 +703,9 @@ Example: time_per_move = clock.my_ms / 40
 
 **SDK behaviour:** Log error, game over, continue polling for next game.
 
-### Agent has control
+### Agent has control — CUT (design §13.3)
 
-**Trigger:** `TurnResponse` with `controller: "agent"` or `NoGameResponse` with `reason: "agent_has_control"`
-
-**Message:**
-```
-Agent has control. Waiting for release...
-```
-
-**SDK behaviour:** Log **once**, then poll silently every 2s until `controller` returns to `"client"`. Do not log repeatedly.
+Not implemented. No `controller` field, no `agent_has_control` reason.
 
 ### CAS conflict (409)
 
@@ -800,44 +774,9 @@ Opponent disconnected. You win by abandonment.
 
 **SDK behaviour:** Silent continue, keep polling. Log once on first poll: `"Connected. Waiting for opponent..."`
 
-### Challenge declined
+### Challenge errors — CUT (design §12)
 
-**Trigger:** SSE event (not SDK's problem) or GET `/challenges` shows `status: "declined"`
-
-**Message:** (Only if attendee manually polls challenges)
-```
-Challenge to BetaBot was declined.
-```
-
-### Challenge expired (seat unavailable)
-
-**Trigger:** `status: "expired"` in challenge response, `reason` may be `"seat_unavailable"`
-
-**Message:**
-```
-Challenge to BetaBot expired: opponent is already in a game.
-Wait for their game to finish or challenge someone else.
-```
-
-### Opponent not found
-
-**Trigger:** `400` on `POST /challenges` with `"Opponent bot not found"`
-
-**Message:**
-```
-Bot "XYZ" not found.
-Check the leaderboard for available bot names.
-```
-
-### Already in a game (challenge rejected)
-
-**Trigger:** `409` on `POST /challenges` with `"already in a game"`
-
-**Message:**
-```
-Cannot create challenge: you are already playing a game.
-Wait for your current game to finish.
-```
+Challenges are gone; none of these messages exist.
 
 ---
 
@@ -852,8 +791,6 @@ Wait for your current game to finish.
   - `ErrorResponse` → `ClientError` subclass with prose
   
 - **409 handling:** Mock a 409 response, assert SDK discards move and re-polls, never retries same move
-
-- **Agent control:** Mock `controller: "agent"`, assert SDK logs once and idles, does not log repeatedly
 
 - **Rate limiting:** Mock 429 with `Retry-After`, assert SDK waits correct duration
 
@@ -902,7 +839,7 @@ This is the acceptance bar: if the shipped baseline fails this test, it is not s
 
 4. **Arena diagnostics work:** `arena.py` run with a bot that flags shows flag count >0 and p95 move time near the time control limit. A bot with illegal moves shows illegal attempt count >0.
 
-5. **Agent control is silent:** Mock `controller: "agent"`, run SDK, assert log output is **one line total**. No stream of "waiting..." messages.
+5. **CUT (design §13.3):** agent control silence criterion removed with the handoff.
 
 6. **Opening randomisation is real:** `arena.py --games 10 --seed 1` and `--seed 2` produce different first-move distributions (measure with chi-squared test or visual inspection).
 
@@ -1014,7 +951,7 @@ This is the acceptance bar: if the shipped baseline fails this test, it is not s
 
 **Seams consumed:**
 - `chess_core` (Part 1): rules, clock, ELO, all functions and constants
-- `chess_server` HTTP API (Part 5): `/bots`, `/bots/me/turn`, `/games/{id}/moves`, `/games/{id}/resign`, `/challenges/*`
+- `chess_server` HTTP API (Part 5): `/bots`, `/bots/me/turn`, `/games/{id}/moves`, `/games/{id}/resign`
 
 **Seams produced:**
 - `choose_move(board: chess.Board, clock: ClockView) -> chess.Move` — attendees and workshop-author both depend on this

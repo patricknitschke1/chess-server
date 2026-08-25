@@ -981,7 +981,6 @@ class ChessClient:
         name: str,
         owner: str,
         join_code: str,
-        role: str = "competitor"
     ) -> str:
         """Register a new bot.
         
@@ -989,7 +988,6 @@ class ChessClient:
             name: Bot name (must be unique)
             owner: Owner identifier (email or username)
             join_code: Workshop join code
-            role: "competitor" or "benchmark"
         
         Returns:
             Bot token (store this!)
@@ -1002,7 +1000,6 @@ class ChessClient:
     def run(
         self,
         choose_move_fn: Callable[[chess.Board, ClockView], chess.Move],
-        idle_on_control_handoff: bool = True
     ) -> None:
         """Run the bot's main loop.
         
@@ -1014,31 +1011,14 @@ class ChessClient:
         
         Args:
             choose_move_fn: The bot's choose_move function
-            idle_on_control_handoff: If True, idle when controller='agent'
         
         Raises:
             ClientError: On unrecoverable errors (invalid token, server down)
         """
         ...
     
-    def challenge(
-        self,
-        opponent_name: str,
-        time_control: str = "rated"
-    ) -> int:
-        """Challenge another bot to a game.
-        
-        Args:
-            opponent_name: Name of bot to challenge
-            time_control: "rated" (3+2) or "exhibition" (5+10)
-        
-        Returns:
-            Challenge ID
-        
-        Raises:
-            ClientError: If opponent not found, either bot already playing, etc.
-        """
-        ...
+    # CUT (design §12): challenge() removed with challenges. Pairing is
+    # matchmaker-only. Do not reintroduce.
     
     def resign(self, game_id: int, ply: int) -> None:
         """Resign the current game.

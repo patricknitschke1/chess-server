@@ -25,8 +25,8 @@ Name the files the task may touch. The standard fence:
 > Do NOT touch `chess_core/`, `starter-kit/`, `docs/`, `AGENTS.md`. If something
 > there looks wrong, **report it — do not fix it.**
 
-Cross-document coherence is the orchestrator's call. A subagent that quietly
-edits a spec has made a decision nobody reviewed.
+Cross-document coherence is decided outside the subagent. A subagent that
+quietly edits a spec has made a decision nobody reviewed.
 
 ## Testing
 

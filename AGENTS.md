@@ -94,13 +94,9 @@ Subagent reports go in `docs/agent-reports/` — see [docs/agent-reports/README.
 
 The specs are written. **They are no longer under active review** — the design spec went through five adversarial rounds and the server spec through a pre-build round, and that is enough. Build from them, and when one is wrong, fix it in the same change rather than opening another review pass.
 
-The orchestrator is accountable for the whole: no functionality lost between role specs, and the seams still meeting. It does not re-review settled text.
+**The arena must still be verifiable through the specs.** If a behaviour exists only in someone's head, it does not exist — a role spec that omits something means that thing does not get built.
 
-Remaining sequence per track: **role spec → implementation plan → build**, each track owned by exactly one agent.
-
-**The arena must still be verifiable through the specs.** If a behaviour exists only in someone's head, it does not exist — a role spec that omits something means that thing does not get built. That has not changed; only the number of review rounds has.
-
-Reviews are now **on request, not by default.** Ask the user rather than dispatching a reviewer.
+Reviews are **on request, not by default.** Ask the user rather than dispatching a reviewer.
 
 ## Working here
 
