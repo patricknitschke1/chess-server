@@ -540,7 +540,7 @@ This is the one place trusted in-process code plays a game, and it is why `refer
 
 ### 10.2 Application
 
-Ratings are computed and applied inside the same transaction that finalises the game, guarded by `UNIQUE (game_id, bot_id)`. `bots.rating` must equal 1200 plus the sum of that bot's deltas; `GET /admin/consistency` asserts this and startup logs loudly on mismatch.
+Ratings are computed and applied inside the same transaction that finalises the game, guarded by `UNIQUE (game_id, bot_id)`. `bots.rating` must equal 1200 plus the sum of that bot's deltas; **this is asserted at startup and logged loudly on mismatch.** §15's `GET /admin/consistency` route was cut — the check itself stays, because it is the one alarm that catches double-rating.
 
 **The consistency check applies to competitors only.** An anchor's rating is fixed and it accrues no `rating_history` rows, so `1200 + sum(deltas)` is false for every anchor by construction — checking them would leave the one alarm that catches double-rating permanently red on a healthy server, which is the same as having no alarm. Anchors also get no `rating_history` row from a one-sided exchange: only the competitor's rating moved, so only the competitor has a delta to record.
 

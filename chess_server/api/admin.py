@@ -5,18 +5,16 @@ dependency is on the router, so a route added here is authenticated by default
 rather than by whoever remembers.
 """
 import logging
-import secrets
 
 from fastapi import APIRouter, Depends, Request, status
 
 from chess_core import STARTING_RATING, TerminationReason
 
-from chess_server.api.auth import hash_token, require_admin
+from chess_server.api.auth import require_admin
 from chess_server.api.errors import (
     BOT_NAME_NOT_FOUND,
     GAME_ALREADY_TERMINAL,
     GAME_NOT_FOUND,
-    REISSUE_WHILE_SEATED,
     ApiError,
 )
 from chess_server.api.models import (
@@ -24,7 +22,6 @@ from chess_server.api.models import (
     ConsistencyCheckResponse,
     ConsistencyViolation,
     PauseMatchmakingResponse,
-    ReissueTokenResponse,
     ResumeMatchmakingResponse,
 )
 from chess_server.api.state import AppState, get_state
@@ -34,7 +31,6 @@ from chess_server.store.repositories import (
     BotRepo,
     GameRepo,
     RatingHistoryRepo,
-    SeatRepo,
 )
 from chess_server.store.txn import critical_section
 
@@ -94,38 +90,13 @@ async def resume_matchmaking(request: Request) -> ResumeMatchmakingResponse:
     return ResumeMatchmakingResponse(paused=False)
 
 
-@router.post("/bots/{name}/token", response_model=ReissueTokenResponse)
-async def reissue_token(request: Request, name: str) -> ReissueTokenResponse:
-    """Refused while the bot is seated: its SDK is mid-game and would be locked
-    out of a position it is on the clock for."""
-    app_state = get_state(request)
-    bot = await _bot_by_name_or_404(app_state, name)
-    token = secrets.token_urlsafe(TOKEN_BYTES)
-    async with critical_section(
-        app_state.store.writer, app_state.store.executor, app_state.deps.sink
-    ) as txn:
-        seat = await SeatRepo(txn.conn, txn.executor).get_seat(bot.id)
-        if seat is not None:
-            raise ApiError(
-                status.HTTP_409_CONFLICT,
-                REISSUE_WHILE_SEATED.format(name=name, game_id=seat.game_id),
-            )
-        await BotRepo(txn.conn, txn.executor).update_token_hash(bot.id, hash_token(token))
-    logger.info("reissued the token for bot %d", bot.id)  # never the token itself
-    return ReissueTokenResponse(bot_id=bot.id, bot_name=bot.name, token=token)
-
-
-@router.get("/consistency", response_model=ConsistencyCheckResponse)
-async def consistency(request: Request) -> ConsistencyCheckResponse:
-    return await check_consistency(get_state(request))
-
-
 async def check_consistency(app_state: AppState) -> ConsistencyCheckResponse:
     """`rating == STARTING_RATING + sum(deltas)` for competitors only.
 
-    Anchors hold fixed ratings away from `STARTING_RATING` and accrue no history
-    rows, so including them would leave the one alarm that catches double-rating
-    permanently red — the same as having no alarm at all.
+    Runs at startup only — §15's route was cut. Anchors hold fixed ratings away
+    from `STARTING_RATING` and accrue no history rows, so including them would
+    leave the one alarm that catches double-rating permanently red — the same as
+    having no alarm at all.
     """
     bots = BotRepo(app_state.store.reader, app_state.store.reader_executor)
     history = RatingHistoryRepo(app_state.store.reader, app_state.store.reader_executor)

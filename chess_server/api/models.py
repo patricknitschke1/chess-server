@@ -225,12 +225,6 @@ class ResumeMatchmakingResponse(BaseModel):
     paused: bool
 
 
-class ReissueTokenResponse(BaseModel):
-    bot_id: int
-    bot_name: str
-    token: str
-
-
 class ConsistencyViolation(BaseModel):
     bot_id: int
     bot_name: str

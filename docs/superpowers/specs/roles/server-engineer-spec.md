@@ -712,9 +712,8 @@ Admin, all `Depends(get_admin)`:
 | `/admin/games/{id}/abort` | POST | `AbortGameResponse` | 401, 404, 409 already terminal |
 | `/admin/matchmaking/pause` | POST | `PauseMatchmakingResponse` | 401 |
 | `/admin/matchmaking/resume` | POST | `ResumeMatchmakingResponse` | 401 |
-| `/admin/bots/{name}/token` | POST | `ReissueTokenResponse` | 401, 404, 409 seat held |
-| `/admin/reset` | POST | `ResetResponse` | 401, 409 matchmaking not paused |
-| `/admin/consistency` | GET | `ConsistencyCheckResponse` | 401 |
+
+`/admin/bots/{name}/token`, `/admin/reset` and `/admin/consistency` are **cut** (design §15). The consistency *check* survives as a startup assertion.
 
 `POST /arena-reports` and `GET /bots/{bot_id}/arena-reports` are **not in this build** (§3.5).
 
@@ -786,11 +785,11 @@ Per-client bounded queue of 256, drop-oldest; a dropped client refetches `/state
 
 Non-featured `move_played` events are coalesced: after emitting one for a non-featured game, suppress further `move_played` for that game for `MOVE_COALESCE_NS`. Featured games bypass the throttle. Ten simultaneous blitz games otherwise flood the stream with moves nobody is watching.
 
-### 8.5 `/admin/consistency`
+### 8.5 The consistency check (startup only)
 
-Assert `bots.rating == STARTING_RATING + sum(rating_history.delta)` **for `role='competitor'` bots only**, and log loudly at startup on mismatch.
+Assert `bots.rating == STARTING_RATING + sum(rating_history.delta)` **for `role='competitor'` bots only**, and log loudly at startup on mismatch. The `/admin/consistency` route was cut (design §15); the check was not.
 
-Anchors have fixed ratings that are not 1200 and, being rated one-sidedly, accrue no `rating_history` rows, so `800 != 1200 + 0` for every anchor on every run. This is the one alarm in the system that catches double-rating (design §10.2); an alarm that is red on a healthy server is an alarm nobody reads. Benchmark bots satisfy the identity trivially — unrated, so no deltas and no movement from 1200 — and are excluded anyway, to match design §10.2 exactly.
+Anchors have fixed ratings that are not 1200 and, being rated one-sidedly, accrue no `rating_history` rows, so `800 != 1200 + 0` for every anchor on every run. This is the one alarm in the system that catches double-rating (design §10.2); an alarm that is red on a healthy server is an alarm nobody reads.
 
 ### 8.6 Recovery — design §7.1
 
@@ -858,8 +857,6 @@ Passing a constant `0` here is the failure worth naming: `_allowed` never relaxe
 **`/admin/games/{id}/abort`** — CAS from the game's current status to `aborted`, `termination='admin_abort'`, `rated=0`, seats freed, mailboxes cleared, waiters woken, `game_ended` buffered. Racing the ticker is fine: exactly one of the two CAS updates gets `rowcount == 1` and the other abandons silently.
 
 **`/admin/matchmaking/pause` and `/resume`** — one process-wide flag. `paused` means global matchmaking pause and nothing else. There is no per-bot pause; a bot that wants to stop playing stops polling.
-
-**`/admin/bots/{name}/token`** — refused with `409` while the bot holds a seat. Re-issue is admin-only so a lost token does not become a re-registration that distorts the ladder.
 
 Structured logging: one line per game start and end with ids, termination and rating deltas. Tokens are never logged, in any path.
 

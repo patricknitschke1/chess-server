@@ -1704,19 +1704,7 @@ All require `Authorization: Bearer <ADMIN_TOKEN>`.
 - **Errors:**
   - `401` — ErrorResponse: "Invalid admin token"
 
-**POST /admin/bots/{name}/token**
-- **Request:** empty body
-- **Response (200):**
-  ```python
-  class ReissueTokenResponse(BaseModel):
-      bot_id: int
-      bot_name: str
-      token: str
-  ```
-- **Errors:**
-  - `401` — ErrorResponse: "Invalid admin token"
-  - `404` — ErrorResponse: "Bot not found"
-  - `409` — ErrorResponse: "Cannot reissue token while bot holds a seat"
+**POST /admin/bots/{name}/token** — **CUT** with design §15. A lost token means registering a new bot.
 
 **POST /admin/reset**
 - **Request:** empty body
@@ -1747,7 +1735,7 @@ vertical, including `POST /arena-reports`, `GET /bots/{bot_id}/arena-reports` an
 `arena_report_posted` SSE event, because its only producer (`arena.py --report`) is
 deferred with it. The models return with the dashboard panel that renders them.
 
-**GET /admin/consistency**
+**GET /admin/consistency** — **route CUT** with design §15. The check still runs at startup; these models are the shape it logs.
 - **Response (200):**
   ```python
   class ConsistencyCheckResponse(BaseModel):

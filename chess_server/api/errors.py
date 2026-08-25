@@ -37,10 +37,6 @@ ILLEGAL_MOVE = (
 ADMIN_REQUIRED = "Admin token required."
 GAME_ALREADY_TERMINAL = "Game {game_id} has already ended; there is nothing to abort."
 BOT_NAME_NOT_FOUND = "Bot not found: {name}."
-REISSUE_WHILE_SEATED = (
-    "Cannot reissue a token while '{name}' holds a seat. Abort game {game_id}"
-    " first, then retry."
-)
 
 INVALID_JOIN_CODE = "Invalid join code. Ask the workshop host for the current one."
 INVALID_ROLE = "Invalid role '{role}'. Register with role 'competitor'."

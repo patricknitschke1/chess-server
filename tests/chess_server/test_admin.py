@@ -9,6 +9,7 @@ import pytest
 from fastapi import status
 
 from chess_core import STARTING_RATING, GameResult, TerminationReason
+from chess_server.api.admin import check_consistency
 from chess_server.api.auth import hash_token
 from chess_server.engine import state as engine_state
 from chess_server.engine.games import finalise_game_locked
@@ -30,8 +31,6 @@ ROUTES = (
     ("post", "/admin/games/1/abort"),
     ("post", "/admin/matchmaking/pause"),
     ("post", "/admin/matchmaking/resume"),
-    ("post", "/admin/bots/alpha/token"),
-    ("get", "/admin/consistency"),
 )
 
 
@@ -156,54 +155,10 @@ async def test_pause_stops_the_ticker_creating_games_and_resume_restores_it(
     assert len(await games.list_active_summaries()) == 1
 
 
-# --- 4. token re-issue --------------------------------------------------------
-
-async def test_reissuing_for_an_unknown_bot_is_404(client):
-    response = await client.post("/admin/bots/nobody/token", headers=ADMIN)
-
-    assert response.status_code == status.HTTP_404_NOT_FOUND
+# --- 4. token re-issue — CUT with §15. A lost token means registering a new bot.
 
 
-async def test_reissuing_while_the_bot_holds_a_seat_is_409(client, live_game, two_bots):
-    response = await client.post(
-        f"/admin/bots/{two_bots[0].name}/token", headers=ADMIN
-    )
-
-    assert response.status_code == status.HTTP_409_CONFLICT
-    assert "seat" in response.json()["error"].lower()
-
-
-async def test_a_reissued_token_works_the_old_one_stops_and_neither_is_logged(
-    client, api_state, seed_bots, caplog
-):
-    (bot,) = await seed_bots("solo")
-    old_token = "old-plaintext"
-    async with critical_section(api_state.store.writer, api_state.store.executor):
-        await BotRepo(api_state.store.writer, api_state.store.executor).update_token_hash(
-            bot.id, hash_token(old_token)
-        )
-    assert (
-        await client.get("/bots/me", headers={"Authorization": f"Bearer {old_token}"})
-    ).status_code == status.HTTP_200_OK
-
-    with caplog.at_level(logging.DEBUG):
-        body = (await client.post("/admin/bots/solo/token", headers=ADMIN)).json()
-
-    new_token = body["token"]
-    assert body["bot_id"] == bot.id and body["bot_name"] == "solo"
-    assert (
-        await client.get("/bots/me", headers={"Authorization": f"Bearer {old_token}"})
-    ).status_code == status.HTTP_401_UNAUTHORIZED
-    assert (
-        await client.get("/bots/me", headers={"Authorization": f"Bearer {new_token}"})
-    ).status_code == status.HTTP_200_OK
-
-    logged = "\n".join(record.getMessage() for record in caplog.records)
-    assert old_token not in logged
-    assert new_token not in logged
-
-
-# --- 5. the consistency alarm -------------------------------------------------
+# --- 5. the consistency alarm (startup only; §15's route was cut) -------------
 
 async def test_a_healthy_server_with_anchors_that_have_played_is_consistent(
     client, api_state, make_game, seed_bots, poll
@@ -219,9 +174,10 @@ async def test_a_healthy_server_with_anchors_that_have_played_is_consistent(
             api_state.deps, txn, game, GameResult.WHITE_WIN, TerminationReason.CHECKMATE
         )
 
-    body = (await client.get("/admin/consistency", headers=ADMIN)).json()
+    report = await check_consistency(api_state)
 
-    assert body == {"consistent": True, "violations": []}
+    assert report.consistent is True
+    assert report.violations == []
 
 
 async def test_a_corrupted_competitor_rating_is_reported_with_both_numbers(
@@ -233,18 +189,15 @@ async def test_a_corrupted_competitor_rating_is_reported_with_both_numbers(
             api_state.store.writer, api_state.store.executor
         ).update_rating_and_counters(bot.id, STARTING_RATING + 150, "win")
 
-    body = (await client.get("/admin/consistency", headers=ADMIN)).json()
+    report = await check_consistency(api_state)
 
-    assert body["consistent"] is False
-    assert body["violations"] == [
-        {
-            "bot_id": bot.id,
-            "bot_name": "drifted",
-            "expected_rating": STARTING_RATING,
-            "actual_rating": STARTING_RATING + 150,
-            "delta_sum": 0,
-        }
-    ]
+    assert report.consistent is False
+    assert len(report.violations) == 1
+    violation = report.violations[0]
+    assert violation.bot_name == "drifted"
+    assert violation.expected_rating == STARTING_RATING
+    assert violation.actual_rating == STARTING_RATING + 150
+    assert violation.delta_sum == 0
 
 
 async def api_state_anchors(api_state):
