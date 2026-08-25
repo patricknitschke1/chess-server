@@ -233,6 +233,42 @@ async def test_only_the_turn_endpoint_refreshes_the_poll_stamps(
     assert bot.last_poll_at is not None
 
 
+async def test_the_opponent_s_move_does_not_wake_the_waiting_side(
+    client, api_state
+):
+    """Why `not_your_turn` answers immediately rather than holding: nothing on the
+    move path wakes the other seat, so a hold there would expire on the timeout and
+    answer `not_your_turn` anyway — one poll per 20 s instead of one per move."""
+    api_state.settings = replace(api_state.settings, poll_hold_seconds=HOLD_SECONDS)
+    white = await register(client, "ada")
+    black = await register(client, "grace")
+    game_id = await pair(api_state, white["bot_id"], black["bot_id"])
+    assert (await poll(client, white["token"])).json()["ply"] == 0
+    waiter = api_state.waiters.register(black["bot_id"])
+
+    moved = await client.post(
+        f"/games/{game_id}/moves",
+        json={"ply": 0, "move": "e2e4"},
+        headers={"Authorization": f"Bearer {white['token']}"},
+    )
+    assert moved.status_code == 200
+
+    assert not waiter.event.is_set()
+    api_state.waiters.discard(black["bot_id"], waiter)
+
+
+async def test_the_side_not_to_move_answers_without_holding(client, api_state):
+    """The hold is 5 s and the answer must arrive inside a fraction of that."""
+    api_state.settings = replace(api_state.settings, poll_hold_seconds=HOLD_SECONDS)
+    white = await register(client, "ada")
+    black = await register(client, "grace")
+    await pair(api_state, white["bot_id"], black["bot_id"])
+
+    answered = await asyncio.wait_for(poll(client, black["token"]), timeout=0.5)
+
+    assert answered.json() == {"game_id": None, "reason": "not_your_turn"}
+
+
 def test_the_default_hold_is_the_shared_constant(api_state):
     """20 s here against the SDK's 30 s timeout: the skew is deliberate, so a
     healthy hold never times out on the client."""
