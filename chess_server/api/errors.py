@@ -21,6 +21,11 @@ CAS_CONFLICT = (
 NOT_DELIVERED = (
     "This position has not been delivered to you. Call GET /bots/me/turn first."
 )
+NOT_IN_GAME = "Your bot is not a player in game {game_id}."
+NOT_TO_MOVE = "It is not your turn in game {game_id}. Poll GET /bots/me/turn."
+FLAGGED = (
+    "Your clock ran out before this move arrived. The game is over."
+)
 SEAT_HELD = "Either you or your opponent is already in a game."
 TAKE_CONTROL_WHILE_SEATED = (
     "Cannot take control while your bot is in a game. Wait for it to finish, or resign."

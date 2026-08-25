@@ -58,3 +58,18 @@ class MyBotResponse(BaseModel):
     is_provisional: bool
     controller: str
     current_game_id: Optional[int]
+
+
+class SubmitMoveRequest(BaseModel):
+    ply: int
+    move: str
+    client_reported_ms: Optional[int] = None
+
+
+class SubmitMoveResponse(BaseModel):
+    game_id: int
+    ply: int
+    fen: str
+    status: str
+    result: Optional[str] = None
+    termination: Optional[str] = None

@@ -13,7 +13,7 @@ from typing import AsyncIterator, Optional
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
-from chess_server.api import routes_bots
+from chess_server.api import routes_bots, routes_play
 from chess_server.api.errors import ApiError
 from chess_server.api.settings import Settings
 from chess_server.api.state import AppState
@@ -90,6 +90,7 @@ def create_app(app_state: AppState) -> FastAPI:
     app = FastAPI(title="Chess Arena", lifespan=lifespan)
     app.state.arena = app_state
     app.include_router(routes_bots.router)
+    app.include_router(routes_play.router)
 
     @app.exception_handler(ApiError)
     async def _api_error(request: Request, exc: ApiError) -> JSONResponse:
