@@ -9,7 +9,7 @@ Ordered by how expensive it would be to change later.
 
 ---
 
-## 1. I invented a route: `GET /games/{id}/legal_moves`
+## 1. I invented a route: `GET /games/{id}/legal_moves` FINE
 
 **Status:** built, and added to design §8.1 and interfaces Part 5 in the same change.
 
@@ -25,7 +25,7 @@ after the MCP track binds to it.
 
 ---
 
-## 2. Should anchors appear on the leaderboard?
+## 2. Should anchors appear on the leaderboard? FINE
 
 **Currently: no.** Anchors carry `role='anchor'` and the leaderboard filters to
 `role='competitor'`, which leaves `LeaderboardEntry.is_anchor` a field that is

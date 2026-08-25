@@ -13,13 +13,17 @@ When a decision trades cleverness against clarity, choose clarity. This code get
 
 ## Current state
 
-Design is complete and has been through two rounds of adversarial systems-design review (`docs/agent-reports/`). The spec is the source of truth:
+`chess_core/`, `starter-kit/` and `chess_server/` (store, engine, and most of the API) are built and green. Bot strength and anchor calibration are **deferred** — see design §21. Open decisions taken without review are in [docs/open-questions.md](docs/open-questions.md).
+
+The spec is the source of truth:
 [docs/superpowers/specs/2026-08-23-chess-arena-design.md](docs/superpowers/specs/2026-08-23-chess-arena-design.md)
 
 Module boundaries — `chess_core` signatures, SSE events, bot/SDK surface, HTTP models, MCP tools, test layout — are pinned in
 [docs/superpowers/specs/2026-08-23-chess-arena-interfaces.md](docs/superpowers/specs/2026-08-23-chess-arena-interfaces.md). Bind to it rather than inventing a signature.
 
-§4 (concurrency), §6 (clock and delivery) and §7.1 (restart recovery) are normative and may not be relaxed for convenience. Build order is §20. Commands below describe the intended layout and will become real as phases land — do not assume a command works until the phase that creates it is done.
+§4 (concurrency), §6 (clock and delivery) and §7.1 (restart recovery) are normative and may not be relaxed for convenience. Build order is §20.
+
+**Fix passes keep landing in the design spec and skipping the interfaces document.** Four rounds running. When a fix changes a seam, edit the pinned document explicitly — not by proxy.
 
 ## Architecture
 
@@ -56,7 +60,18 @@ starter-kit/     What attendees clone. bot.py is the only file they edit.
 - Python, `python-chess` for rules. Do not hand-roll move generation.
 - Small, focused files. A growing file usually means tangled responsibilities.
 - Test failure paths first — illegal moves, flag-fall, disconnects, CAS conflicts. Those are what break live.
+- **Prove every test can fail.** Write the test, watch it fail for the right reason, then implement. For anything subtle, mutate the code and confirm the test goes red. Eight tests shipped here that could not fail — two with no assertion at all, and one asserting an upper bound that a completely dead clock satisfied *more easily* than a working one. A test you have not watched fail is not evidence.
 - `chess_core` gets straight unit tests, no fixtures, no mocks.
+
+## Local gotchas
+
+Verified the hard way; each has cost real time here.
+
+- **Always `.venv/bin/pytest` and `.venv/bin/python`.** Never bare `pytest`/`python`.
+- **Never pipe a long test run through `tail`.** It buffers all output, the run looks idle, the terminal gets backgrounded as a suspected hang, and killing it dumps the whole scrollback into context.
+- **Clear `__pycache__` between mutation steps.** A `cp` restore inside the same second leaves a stale `.pyc` that Python reuses, so the "restored" run silently executes the mutant.
+- **Server tests use a file-backed database under `tmp_path`, never `:memory:`.** Two connections to `:memory:` are two separate databases, so the reader/writer split, WAL and `BEGIN IMMEDIATE` contention become unobservable — exactly what §4 needs the tests to exercise.
+- **Verify library and SQLite claims by executing them.** Reading missed all of: `INTEGER PRIMARY KEY NOT NULL` still accepting NULL, `asyncio.CancelledError` not being an `Exception` subclass, and `ORDER BY created_at` with tied timestamps deleting the newest rows.
 
 ## Skills and agents
 
@@ -66,6 +81,9 @@ The split is deliberate and is itself workshop content:
 **subagents isolate noisy work; skills inject knowledge into work you are already doing.** If a tool's output is small enough to read inline, it does not need a subagent — fix the tool's output instead.
 
 Extract a new skill when a pattern has recurred, not in anticipation of it.
+
+Dispatching a subagent to build, fix or plan anything here goes through
+[.github/skills/dispatching-build-subagents/SKILL.md](.github/skills/dispatching-build-subagents/SKILL.md) — scope fencing, the mutation rule, the environment facts, and the report format. It exists because the same preamble was being retyped into every dispatch, which is how it drifts.
 
 Subagent reports go in `docs/agent-reports/` — see [docs/agent-reports/README.md](docs/agent-reports/README.md) for naming and conventions.
 
