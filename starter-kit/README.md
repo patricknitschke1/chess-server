@@ -36,39 +36,32 @@ Beat `ref_greedy` consistently and you are ready to go live.
 
 ## 2. Go live
 
-Create `play.py` next to `bot.py`, paste this, and fill in the four values at
-the top:
-
-```python
-from chess_client import ChessClient
-from bot import choose_move
-
-SERVER = "http://localhost:8000"   # ask the workshop host
-NAME = "Sirius"                    # your bot's name, shown on the leaderboard
-OWNER = "ada lovelace"             # YOUR OWN NAME - see the warning below
-JOIN_CODE = "workshop2026"         # ask the workshop host
-
-client = ChessClient(SERVER)
-client.register(NAME, OWNER, JOIN_CODE)
-print(f"{NAME} is live. Press Ctrl-C to stop.")
-client.run(choose_move)
-```
-
-Then:
+Register once. Ask the workshop host for the join code and the server address.
 
 ```
-../.venv/bin/python play.py
+../.venv/bin/python run.py --register --name Sirius --owner "ada lovelace" \
+    --join-code workshop2026 --server http://localhost:8000
 ```
 
-It registers you, waits to be paired, and plays until you stop it. Your bot
-appears on the projector.
+That saves your bot's token to `.env` next to `bot.py`. **The token is your
+bot's identity** — keep the file, do not share it, do not commit it. It is
+never printed.
 
-**Use your own name as `OWNER`. Do not copy your neighbour's.** Two bots with
+Then play, as often as you like:
+
+```
+../.venv/bin/python run.py
+```
+
+It loads the saved token, waits to be paired, and plays until you press Ctrl-C.
+Your bot appears on the projector. Edit `bot.py`, stop, and run it again.
+
+**Use your own name as `--owner`. Do not copy your neighbour's.** Two bots with
 the same owner are never paired for a rated game, so a whole table registering
 as `team1` will sit there producing no rating movement at all and no error to
 tell you why.
 
-`NAME` and `OWNER` accept letters, digits, spaces, `_` and `-`, up to 32
+`--name` and `--owner` accept letters, digits, spaces, `_` and `-`, up to 32
 characters. No `@`, so an email address will be rejected.
 
 ## 3. Make it better
@@ -102,13 +95,15 @@ Change one thing, re-run the arena, keep it if the score went up.
   from the folder containing `bot.py`.
 - **`ModuleNotFoundError: chess_core`** — the setup step did not run. Go up one
   folder and run `.venv/bin/python -m pip install -e .`.
-- **`Could not reach the arena server`** — check `SERVER` with the workshop
+- **`Could not reach the arena server`** — check `--server` with the workshop
   host, and that they are still running.
-- **Registration failed** — usually a wrong `JOIN_CODE`, or a `NAME` someone
-  already took. Pick another name.
+- **`No saved bot token`** — you have not registered yet, or `.env` was
+  deleted. Run the `--register` command again.
+- **Registration failed** — usually a wrong `--join-code`, or a `--name`
+  someone already took. Pick another name.
 - **My bot never gets a game** — it needs an opponent. Wait; the server pairs
   you as soon as one is free.
-- **Nothing on the leaderboard moves** — check your `OWNER` is unique.
+- **Nothing on the leaderboard moves** — check your `--owner` is unique.
 
 ## Rules
 
