@@ -20,6 +20,7 @@ from chess_server.api.errors import (
     ApiError,
 )
 from chess_server.api.models import (
+    PROVISIONAL_GAMES,
     MyBotResponse,
     NoGameResponse,
     RegisterBotRequest,
@@ -44,10 +45,10 @@ from chess_server.store.txn import critical_section
 router = APIRouter()
 
 # `anchor` is deliberately absent: anchors are seeded at startup, and role='anchor'
-# is what keeps them off the leaderboard and out of the one-per-owner rule.
+# is what keeps them out of the one-competitor-per-owner rule and off the rating
+# updates. They do appear on the leaderboard, flagged is_anchor.
 REGISTRABLE_ROLES = ("competitor", "benchmark")
 
-PROVISIONAL_GAMES = 10
 TOKEN_BYTES = 32
 
 # Design §8.2 gives six, and the handler covers six (role spec §5.5).

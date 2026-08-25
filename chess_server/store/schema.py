@@ -67,6 +67,11 @@ CREATE TABLE IF NOT EXISTS moves (
   fen_after          TEXT    NOT NULL,
   server_elapsed_ms  INTEGER NOT NULL,
   client_reported_ms INTEGER,
+  -- Both clocks as at this ply. GET /games/{id}/moves must answer for finished
+  -- games, and re-deriving them from server_elapsed_ms would put increment and
+  -- flag arithmetic in api/, where a second implementation of it would drift.
+  white_ms_after     INTEGER NOT NULL,
+  black_ms_after     INTEGER NOT NULL,
   PRIMARY KEY (game_id, ply)
 );
 

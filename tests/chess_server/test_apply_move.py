@@ -6,8 +6,10 @@ import pytest
 from chess_core import (
     RATED_INCREMENT_NS,
     RATED_TIME_CONTROL_NS,
+    Color,
     GameResult,
     TerminationReason,
+    create_clock,
     ns_to_ms,
 )
 from chess_server.engine import state
@@ -184,6 +186,7 @@ async def test_two_moves_at_the_same_ply_violate_the_primary_key(store, deps, se
     with pytest.raises(sqlite3.IntegrityError):
         async with critical_section(store.writer, store.executor, deps.sink) as txn:
             repo = MoveRepo(txn.conn, txn.executor)
+            clock = create_clock(RATED_TIME_CONTROL_NS, RATED_INCREMENT_NS, Color.WHITE, 0)
             for _ in range(2):
-                await repo.insert_move(game.id, 1, LEGAL, "e4", "fen", 0, None)
+                await repo.insert_move(game.id, 1, LEGAL, "e4", "fen", 0, None, clock)
     assert await moves.list_moves_for_game(game.id) == []

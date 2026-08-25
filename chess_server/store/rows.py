@@ -71,6 +71,8 @@ class MoveRow:
     fen_after: str
     server_elapsed_ms: int
     client_reported_ms: Optional[int]
+    white_ms_after: int
+    black_ms_after: int
 
 
 @dataclass

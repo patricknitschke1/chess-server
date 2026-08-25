@@ -170,8 +170,10 @@ class BotRepo(_Repo):
         return cursor.rowcount
 
     async def list_leaderboard(self) -> list[BotRow]:
+        """Design §10.4: benchmarks are hidden, anchors are shown and marked."""
         rows = await self._all(
-            "SELECT * FROM bots WHERE role = 'competitor' ORDER BY rating DESC, name"
+            "SELECT * FROM bots WHERE role IN ('competitor', 'anchor')"
+            " ORDER BY rating DESC, name"
         )
         return [from_row(BotRow, row) for row in rows]
 
@@ -436,13 +438,17 @@ class MoveRepo(_Repo):
         fen_after: str,
         server_elapsed_ms: int,
         client_reported_ms: Optional[int],
+        clock_after: ClockState,
     ) -> None:
         """server_elapsed_ms is what the clock was charged; client_reported_ms is
         self-reported compute time, diagnostics only (design §5.1)."""
+        after = _clock_to_game_fields(clock_after)
         await self._write(
             "INSERT INTO moves (game_id, ply, uci, san, fen_after, server_elapsed_ms,"
-            " client_reported_ms) VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (game_id, ply, uci, san, fen_after, server_elapsed_ms, client_reported_ms),
+            " client_reported_ms, white_ms_after, black_ms_after)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (game_id, ply, uci, san, fen_after, server_elapsed_ms, client_reported_ms,
+             after["white_ms"], after["black_ms"]),
         )
 
     async def list_moves_for_game(self, game_id: int) -> list[MoveRow]:

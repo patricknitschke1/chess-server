@@ -5,7 +5,7 @@ from chess_server.store.repositories import BotRepo
 from chess_server.store.txn import critical_section
 
 from tests.chess_server.conftest import JOIN_CODE
-from chess_server.api.routes_bots import PROVISIONAL_GAMES
+from chess_server.api.models import PROVISIONAL_GAMES
 
 
 async def _register(client, name, owner=None, role="competitor"):

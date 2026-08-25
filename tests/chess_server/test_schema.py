@@ -56,16 +56,16 @@ def test_seats_unknown_bot_id_is_rejected(fk_conn):
 
 
 def test_moves_duplicate_ply_is_rejected(conn):
-    args = (1, 0, "e2e4", "e4", "fen", 100)
+    args = (1, 0, "e2e4", "e4", "fen", 100, 180_000, 180_000)
     conn.execute(
-        "INSERT INTO moves (game_id, ply, uci, san, fen_after, server_elapsed_ms)"
-        " VALUES (?, ?, ?, ?, ?, ?)",
+        "INSERT INTO moves (game_id, ply, uci, san, fen_after, server_elapsed_ms,"
+        " white_ms_after, black_ms_after) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
         args,
     )
     with pytest.raises(sqlite3.IntegrityError):
         conn.execute(
-            "INSERT INTO moves (game_id, ply, uci, san, fen_after, server_elapsed_ms)"
-            " VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT INTO moves (game_id, ply, uci, san, fen_after, server_elapsed_ms,"
+            " white_ms_after, black_ms_after) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             args,
         )
 

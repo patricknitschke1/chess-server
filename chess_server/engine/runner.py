@@ -190,7 +190,7 @@ async def apply_move_locked(
 
     await MoveRepo(txn.conn, txn.executor).insert_move(
         game.id, new_ply, uci, move_result.san, fen_after,
-        accounted.elapsed_ms, client_reported_ms,
+        accounted.elapsed_ms, client_reported_ms, accounted.new_clock,
     )
     await games.cas_apply_move(
         game.id, game.ply, game.status, fen_after, accounted.new_clock

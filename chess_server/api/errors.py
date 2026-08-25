@@ -18,6 +18,7 @@ GAME_ALREADY_ENDED = (
     "Game {game_id} is no longer at ply {ply}. It has moved on or already ended."
 )
 GAME_NOT_FOUND = "Game {game_id} not found."
+BOT_NOT_FOUND = "Bot not found: {bot_id}. Check the id on /leaderboard."
 CAS_CONFLICT = (
     "The position has changed since ply {ply}. Discard this move and poll"
     " GET /bots/me/turn again."

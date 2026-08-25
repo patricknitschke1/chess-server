@@ -2,12 +2,19 @@ import sqlite3
 
 import pytest
 
-from chess_core import RATED_INCREMENT_NS, RATED_TIME_CONTROL_NS, STARTING_RATING
+from chess_core import (
+    RATED_INCREMENT_NS,
+    RATED_TIME_CONTROL_NS,
+    STARTING_RATING,
+    Color,
+    create_clock,
+)
 from chess_server.store.repositories import BotRepo, GameRepo, MoveRepo, RatingHistoryRepo
 
 NOW = 10_000_000_000_000
 WALL = "2026-08-24T00:00:00Z"
 FEN_AFTER = "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1"
+CLOCK = create_clock(RATED_TIME_CONTROL_NS, RATED_INCREMENT_NS, Color.BLACK, NOW)
 
 
 @pytest.fixture
@@ -51,10 +58,10 @@ async def _game(bots, games, suffix=""):
 async def test_a_duplicate_ply_is_refused(repos):
     bots, games, moves, _ = repos
     _, _, game_id = await _game(bots, games)
-    await moves.insert_move(game_id, 0, "e2e4", "e4", FEN_AFTER, 1234, None)
+    await moves.insert_move(game_id, 0, "e2e4", "e4", FEN_AFTER, 1234, None, CLOCK)
 
     with pytest.raises(sqlite3.IntegrityError):
-        await moves.insert_move(game_id, 0, "d2d4", "d4", FEN_AFTER, 1234, None)
+        await moves.insert_move(game_id, 0, "d2d4", "d4", FEN_AFTER, 1234, None, CLOCK)
 
 
 async def test_a_game_cannot_be_rated_twice_for_one_bot(repos):
@@ -70,20 +77,32 @@ async def test_client_reported_ms_is_optional_and_server_elapsed_ms_is_not(repos
     bots, games, moves, _ = repos
     _, _, game_id = await _game(bots, games)
 
-    await moves.insert_move(game_id, 0, "e2e4", "e4", FEN_AFTER, 1234, None)
+    await moves.insert_move(game_id, 0, "e2e4", "e4", FEN_AFTER, 1234, None, CLOCK)
     (row,) = await moves.list_moves_for_game(game_id)
     assert row.client_reported_ms is None
     assert row.server_elapsed_ms == 1234
 
     with pytest.raises(sqlite3.IntegrityError):
-        await moves.insert_move(game_id, 1, "e7e5", "e5", FEN_AFTER, None, 40)
+        await moves.insert_move(game_id, 1, "e7e5", "e5", FEN_AFTER, None, 40, CLOCK)
+
+
+async def test_both_clocks_are_recorded_with_the_move(repos):
+    """GET /games/{id}/moves must answer for a finished game, and the clocks cannot
+    be re-derived from server_elapsed_ms without duplicating increment arithmetic."""
+    bots, games, moves, _ = repos
+    _, _, game_id = await _game(bots, games)
+
+    await moves.insert_move(game_id, 0, "e2e4", "e4", FEN_AFTER, 1234, None, CLOCK)
+
+    (row,) = await moves.list_moves_for_game(game_id)
+    assert (row.white_ms_after, row.black_ms_after) == (180_000, 180_000)
 
 
 async def test_moves_come_back_in_ply_order_however_they_went_in(repos):
     bots, games, moves, _ = repos
     _, _, game_id = await _game(bots, games)
     for ply in (2, 0, 1):
-        await moves.insert_move(game_id, ply, "e2e4", "e4", FEN_AFTER, 1, None)
+        await moves.insert_move(game_id, ply, "e2e4", "e4", FEN_AFTER, 1, None, CLOCK)
 
     assert [row.ply for row in await moves.list_moves_for_game(game_id)] == [0, 1, 2]
 

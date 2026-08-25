@@ -100,11 +100,15 @@ async def test_seeded_anchors_carry_the_anchor_columns(store):
         assert anchor.last_poll_mono is None
 
 
-async def test_seeded_anchors_are_absent_from_the_leaderboard(store):
-    """Separate from the role assertion above, which would otherwise short-circuit
-    the only test of the exclusion the leaderboard actually performs."""
+async def test_seeded_anchors_appear_on_the_leaderboard_and_are_marked(store):
+    """Plan task 14 and `LeaderboardEntry.is_anchor`: anchors are shown and marked,
+    not hidden. Design §10.3's parenthetical still says the leaderboard filters to
+    `competitor` — if it did, `is_anchor` on the entry would have no purpose.
+    Benchmarks are the ones design §10.4 hides."""
     await seed_anchors(store.writer, store.executor)
-    assert await BotRepo(store.writer, store.executor).list_leaderboard() == []
+    rows = await BotRepo(store.writer, store.executor).list_leaderboard()
+    assert rows != []
+    assert all(row.role == "anchor" and row.is_anchor == 1 for row in rows)
 
 
 async def test_seeding_returns_no_token_and_hashes_are_distinct(store):

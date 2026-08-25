@@ -7,6 +7,10 @@ from typing import List, Optional
 
 from pydantic import BaseModel
 
+# Interfaces "Decisions" §7: display only, never arithmetic, and the same
+# threshold on every surface that annotates a rating.
+PROVISIONAL_GAMES = 10
+
 
 class ErrorResponse(BaseModel):
     error: str
@@ -141,3 +145,85 @@ class ChallengeEntry(BaseModel):
 class ChallengesInboxResponse(BaseModel):
     incoming: List[ChallengeEntry]
     outgoing: List[ChallengeEntry]
+
+
+class LeaderboardEntry(BaseModel):
+    bot_id: int
+    bot_name: str
+    owner: str
+    rating: int
+    wins: int
+    losses: int
+    draws: int
+    games_played: int
+    is_provisional: bool
+    role: str
+    is_anchor: bool
+
+
+class LeaderboardResponse(BaseModel):
+    bots: List[LeaderboardEntry]
+    total_bots: int
+
+
+class GameDetailResponse(BaseModel):
+    game_id: int
+    white_bot_id: int
+    white_bot_name: str
+    black_bot_id: int
+    black_bot_name: str
+    status: str
+    result: Optional[str]
+    termination: Optional[str]
+    fen: str
+    ply: int
+    history_san: List[str]
+    white_ms: int
+    black_ms: int
+    time_control_ms: int
+    increment_ms: int
+    rated: bool
+    source: str
+    created_at: str
+    started_at: Optional[str]
+    ended_at: Optional[str]
+
+
+class GameMoveEntry(BaseModel):
+    ply: int
+    uci: str
+    san: str
+    fen_after: str
+    server_elapsed_ms: int
+    client_reported_ms: Optional[int]
+    white_ms_after: int
+    black_ms_after: int
+
+
+class GameMovesResponse(BaseModel):
+    game_id: int
+    white_bot_name: str
+    black_bot_name: str
+    white_rating: Optional[int]
+    black_rating: Optional[int]
+    status: str
+    result: Optional[str]
+    termination: Optional[str]
+    starting_fen: str
+    final_ply: int
+    moves: List[GameMoveEntry]
+    white_strikes: int
+    black_strikes: int
+
+
+class RatingPoint(BaseModel):
+    game_id: int
+    rating_after: int
+    delta: int
+    ts: str
+
+
+class RatingHistoryResponse(BaseModel):
+    bot_id: int
+    bot_name: str
+    points: List[RatingPoint]
