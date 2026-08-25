@@ -10,9 +10,12 @@ row depend on who happens to be watching.
 """
 import asyncio
 import json
+import time
 from collections import deque
 from dataclasses import dataclass, field
-from typing import AsyncIterator, Optional
+from typing import AsyncIterator, Callable, Optional
+
+from chess_core import is_within
 
 from chess_server.store.run import current_run_id
 
@@ -29,6 +32,11 @@ CLIENT_QUEUE_MAX = 256
 HEARTBEAT_SECONDS = 15.0
 
 HEARTBEAT_FRAME = ": heartbeat\n\n"
+
+# Design §14: ten blitz games otherwise flood the stream with moves nobody is
+# watching. A dropped move leaves a seq gap on purpose — a client that cares
+# refetches /state, which is why /state carries event_id.
+MOVE_COALESCE_NS = 500_000_000
 
 
 def format_sse(envelope: dict) -> str:
@@ -57,6 +65,9 @@ class Hub:
         self._clients: list[Client] = []
         self._heartbeat_seconds = heartbeat_seconds
         self.featured_game_id: Optional[int] = None
+        # Replaced by AppState with the process clock; a bare Hub is still usable.
+        self.now_mono: Callable[[], int] = time.monotonic_ns
+        self._last_move_mono: dict[int, int] = {}
 
     def subscribe(self) -> Client:
         client = Client()
@@ -71,19 +82,33 @@ class Hub:
         return len(self._clients)
 
     def publish(self, seq: int, event_type: str, data: dict) -> None:
+        if event_type == "game_ended":
+            self._last_move_mono.pop(data.get("game_id"), None)
+        elif event_type == "move_played":
+            data = {**data, "is_featured": data["game_id"] == self.featured_game_id}
+            if self._throttled(data["game_id"], data["is_featured"]):
+                return
         envelope = {
             "run": current_run_id(),
             "seq": seq,
             "event_type": event_type,
-            "data": self._stamp(event_type, data),
+            "data": data,
         }
         for client in self._clients:
             client.offer(envelope)
 
-    def _stamp(self, event_type: str, data: dict) -> dict:
-        if event_type != "move_played":
-            return data
-        return {**data, "is_featured": data.get("game_id") == self.featured_game_id}
+    def _throttled(self, game_id: int, is_featured: bool) -> bool:
+        if is_featured:
+            return False
+        now_mono = self.now_mono()
+        last = self._last_move_mono.get(game_id)
+        if last is not None and is_within(last, now_mono, MOVE_COALESCE_NS):
+            return True
+        self._last_move_mono[game_id] = now_mono
+        return False
+
+    def clear_coalescing(self) -> None:
+        self._last_move_mono.clear()
 
     async def stream(self, client: Client) -> AsyncIterator[str]:
         try:

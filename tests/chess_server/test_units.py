@@ -60,6 +60,9 @@ ALLOWED = {
     # Ops thresholds for tick staleness, numerically equal to DELIVERY_GRACE_NS
     # and POLL_RECENCY_NS and unrelated to either. They decide no game outcome.
     "supervisor.py": {DELIVERY_GRACE_NS, POLL_RECENCY_NS},
+    # How long a board stays on the projector, numerically POLL_HOLD_NS and
+    # semantically unrelated to it. A display choice, not a game deadline.
+    "featured.py": {POLL_HOLD_NS},
 }
 
 

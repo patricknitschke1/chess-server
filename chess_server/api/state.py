@@ -10,6 +10,7 @@ from typing import Callable, Optional
 
 from fastapi import Request
 
+from chess_server.api.featured import FeaturedSelector
 from chess_server.api.rate_limit import RateLimiter, register_limiter
 from chess_server.api.settings import Settings
 from chess_server.api.sse import Hub
@@ -34,9 +35,11 @@ class AppState:
     register_limiter: RateLimiter = field(default_factory=register_limiter)
     waiters: WaiterRegistry = field(default_factory=WaiterRegistry)
     hub: Hub = field(default_factory=Hub)
+    featured: FeaturedSelector = field(default_factory=FeaturedSelector)
     deps: EngineDeps = field(init=False)
 
     def __post_init__(self) -> None:
+        self.hub.now_mono = self.now_mono
         # The hub is the sink in the server; a test may substitute a recorder.
         if self.sink is None:
             self.sink = self.hub.publish

@@ -95,7 +95,11 @@ def _seqs(client):
 
 # --- 1. bounded, drop-oldest -------------------------------------------------
 
+# Game 1 is featured throughout this section: coalescing (test_featured.py) would
+# otherwise swallow the flood these tests exist to produce.
+
 def test_a_stalled_client_never_blocks_a_publisher(hub):
+    hub.featured_game_id = 1
     client = hub.subscribe()
 
     for seq in range(300):
@@ -105,6 +109,7 @@ def test_a_stalled_client_never_blocks_a_publisher(hub):
 
 
 def test_the_surviving_window_is_the_newest_not_the_oldest(hub):
+    hub.featured_game_id = 1
     client = hub.subscribe()
 
     for seq in range(300):
@@ -114,6 +119,7 @@ def test_the_surviving_window_is_the_newest_not_the_oldest(hub):
 
 
 def test_one_stalled_client_does_not_starve_another(hub):
+    hub.featured_game_id = 1
     stalled = hub.subscribe()
     for seq in range(300):
         hub.publish(seq, "move_played", {"game_id": 1})
