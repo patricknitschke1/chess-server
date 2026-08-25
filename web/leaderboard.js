@@ -42,7 +42,7 @@ class LeaderboardRail {
 
       const name = document.createElement('span');
       name.className = 'lb-name';
-      name.textContent = bot.bot_name;          // attendee-controlled
+      name.textContent = bot.display_name || bot.bot_name;          // attendee-controlled
       if (bot.is_provisional) name.classList.add('provisional');
 
       const rating = document.createElement('span');

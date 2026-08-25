@@ -54,8 +54,9 @@ PART2_FIELDS = {
         "turn_elapsed_ms", "server_elapsed_ms", "is_featured",
     },
     "game_ended": {
-        "game_id", "white_bot_id", "white_bot_name", "black_bot_id",
-        "black_bot_name", "status", "result", "termination", "rated",
+        "game_id", "white_bot_id", "white_bot_name", "white_bot_display_name",
+        "black_bot_id", "black_bot_name", "black_bot_display_name",
+        "status", "result", "termination", "rated",
         "final_ply", "ended_at",
     },
     "rating_changed": {

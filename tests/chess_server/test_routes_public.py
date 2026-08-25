@@ -137,7 +137,8 @@ async def test_game_detail_carries_every_part5_field(client, api_state, live_gam
     body = (await client.get(f"/games/{live_game.id}")).json()
 
     assert set(body) == {
-        "game_id", "white_bot_id", "white_bot_name", "black_bot_id", "black_bot_name",
+        "game_id", "white_bot_id", "white_bot_name", "white_bot_display_name",
+        "black_bot_id", "black_bot_name", "black_bot_display_name",
         "status", "result", "termination", "fen", "ply", "history_san",
         "white_ms", "black_ms", "time_control_ms", "increment_ms", "rated",
         "source", "created_at", "started_at", "ended_at",
@@ -198,7 +199,8 @@ async def test_moves_carries_every_part5_field(client, api_state, live_game):
     body = (await client.get(f"/games/{live_game.id}/moves")).json()
 
     assert set(body) == {
-        "game_id", "white_bot_name", "black_bot_name", "white_rating", "black_rating",
+        "game_id", "white_bot_name", "white_bot_display_name",
+        "black_bot_name", "black_bot_display_name", "white_rating", "black_rating",
         "status", "result", "termination", "starting_fen", "final_ply", "moves",
         "white_strikes", "black_strikes",
     }

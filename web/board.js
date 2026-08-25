@@ -63,9 +63,9 @@ class BoardPanel {
     this.container.classList.remove('empty', 'ended');
     this.container.classList.toggle('featured', !!game.is_featured);
     this.badge.textContent = game.is_featured ? 'FEATURED' : `game #${game.game_id}`;
-    this.whiteLine.name.textContent = game.white_bot_name;
+    this.whiteLine.name.textContent = game.white_bot_display_name || game.white_bot_name;
     this.whiteLine.rating.textContent = String(game.white_rating);
-    this.blackLine.name.textContent = game.black_bot_name;
+    this.blackLine.name.textContent = game.black_bot_display_name || game.black_bot_name;
     this.blackLine.rating.textContent = String(game.black_rating);
     this.renderFen(game.fen);
     this.setTurn(game.to_move);

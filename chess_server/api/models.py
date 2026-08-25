@@ -91,6 +91,7 @@ class ResignResponse(BaseModel):
 class LeaderboardEntry(BaseModel):
     bot_id: int
     bot_name: str
+    display_name: str
     owner: str
     rating: int
     wins: int
@@ -111,8 +112,10 @@ class GameDetailResponse(BaseModel):
     game_id: int
     white_bot_id: int
     white_bot_name: str
+    white_bot_display_name: str
     black_bot_id: int
     black_bot_name: str
+    black_bot_display_name: str
     status: str
     result: Optional[str]
     termination: Optional[str]
@@ -144,7 +147,9 @@ class GameMoveEntry(BaseModel):
 class GameMovesResponse(BaseModel):
     game_id: int
     white_bot_name: str
+    white_bot_display_name: str
     black_bot_name: str
+    black_bot_display_name: str
     white_rating: Optional[int]
     black_rating: Optional[int]
     status: str
@@ -174,9 +179,11 @@ class ActiveGameSummary(BaseModel):
     game_id: int
     white_bot_id: int
     white_bot_name: str
+    white_bot_display_name: str
     white_rating: int
     black_bot_id: int
     black_bot_name: str
+    black_bot_display_name: str
     black_rating: int
     status: str
     fen: str

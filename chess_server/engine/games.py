@@ -7,6 +7,7 @@ from chess_core import STARTING_FEN, Color, GameResult, RatingUpdate, Terminatio
 from chess_server.engine import state
 from chess_server.engine.deps import EngineDeps
 from chess_server.engine.rating import derive_rating_updates
+from chess_server.engine.reference_bots import display_name as anchor_display_name
 from chess_server.engine.wall import utc_now_iso
 from chess_server.store.cas import CASConflict
 from chess_server.store.repositories import (
@@ -165,8 +166,10 @@ async def _end_game_locked(
         "game_id": game.id,
         "white_bot_id": white.id,
         "white_bot_name": white.name,
+        "white_bot_display_name": anchor_display_name(white.name),
         "black_bot_id": black.id,
         "black_bot_name": black.name,
+        "black_bot_display_name": anchor_display_name(black.name),
         "status": status,
         "result": result.value if result is not None else None,
         "termination": termination.value,

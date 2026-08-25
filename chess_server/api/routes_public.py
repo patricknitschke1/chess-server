@@ -26,6 +26,7 @@ from chess_server.api.models import (
     RatingPoint,
 )
 from chess_server.api.state import AppState, get_state
+from chess_server.engine.reference_bots import display_name as anchor_display_name
 from chess_server.store.repositories import (
     BotRepo,
     GameRepo,
@@ -72,6 +73,7 @@ def to_leaderboard_entry(bot: BotRow) -> LeaderboardEntry:
     return LeaderboardEntry(
         bot_id=bot.id,
         bot_name=bot.name,
+        display_name=anchor_display_name(bot.name),
         owner=bot.owner,
         rating=bot.rating,
         wins=bot.wins,
@@ -125,6 +127,8 @@ async def dashboard_state(request: Request) -> DashboardStateResponse:
                 ),
                 is_featured=row["game_id"] == featured_game_id,
                 rated=bool(row["rated"]),
+                white_bot_display_name=anchor_display_name(row["white_bot_name"]),
+                black_bot_display_name=anchor_display_name(row["black_bot_name"]),
                 **{
                     key: row[key]
                     for key in (
@@ -157,8 +161,10 @@ async def game_detail(request: Request, game_id: int) -> GameDetailResponse:
         game_id=game.id,
         white_bot_id=white.id,
         white_bot_name=white.name,
+        white_bot_display_name=anchor_display_name(white.name),
         black_bot_id=black.id,
         black_bot_name=black.name,
+        black_bot_display_name=anchor_display_name(black.name),
         status=game.status,
         result=game.result,
         termination=game.termination,
@@ -187,7 +193,9 @@ async def game_moves(request: Request, game_id: int) -> GameMovesResponse:
     return GameMovesResponse(
         game_id=game.id,
         white_bot_name=white.name,
+        white_bot_display_name=anchor_display_name(white.name),
         black_bot_name=black.name,
+        black_bot_display_name=anchor_display_name(black.name),
         white_rating=white.rating,
         black_rating=black.rating,
         status=game.status,

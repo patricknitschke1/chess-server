@@ -200,7 +200,7 @@ class Dashboard {
     row.className = 'ticker-row ' + (data.rated ? 'rated' : 'unrated');
 
     const white = document.createElement('span');
-    white.textContent = data.white_bot_name;      // attendee-controlled
+    white.textContent = data.white_bot_display_name || data.white_bot_name;      // attendee-controlled
     const verb = document.createElement('span');
     verb.className = 'ticker-verb';
     verb.textContent = data.result === 'white_win' ? ' beat '
@@ -208,7 +208,7 @@ class Dashboard {
         : data.result === 'draw' ? ' drew with '
           : ' vs ';
     const black = document.createElement('span');
-    black.textContent = data.black_bot_name;      // attendee-controlled
+    black.textContent = data.black_bot_display_name || data.black_bot_name;      // attendee-controlled
     const how = document.createElement('span');
     how.className = 'ticker-how';
     how.textContent = ` · ${data.termination}${data.rated ? '' : ' · unrated'}`;

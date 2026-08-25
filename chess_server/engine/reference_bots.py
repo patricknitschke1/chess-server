@@ -164,10 +164,23 @@ ANCHORS: tuple[tuple[str, ReferenceBot, int], ...] = (
 
 _BY_NAME = {name: bot for name, bot, _ in ANCHORS}
 
+# Cosmetic only — shown on the dashboard in place of the internal identifier,
+# which stays "ref-random" etc. everywhere else (matchmaking, tests, docs).
+ANCHOR_DISPLAY_NAMES = {
+    "ref-random": "Fool's Gambit",
+    "ref-greedy": "King's Gambit",
+    "ref-depth2": "Queen's Gambit",
+}
+
 
 def bot_for(name: str) -> Optional[ReferenceBot]:
     """The ticker's only route from a `bots` row to the code that plays it."""
     return _BY_NAME.get(name)
+
+
+def display_name(name: str) -> str:
+    """The name shown on the dashboard: an anchor's alias, or a bot's own name."""
+    return ANCHOR_DISPLAY_NAMES.get(name, name)
 
 
 def _discarded_token_hash() -> str:
