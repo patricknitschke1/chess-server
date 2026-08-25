@@ -35,7 +35,7 @@ async def recover_locked(
     reset_seq()  # before the flush that assigns seq, so server_run_started is 0
     txn.defer(lambda: set_run_id(run))
     txn.defer(clear_process_state)
-    txn.emit("server_run_started", {"run": run})
+    txn.emit("server_run_started", {"run_id": run, "started_at": now_wall})
     return RecoveryReport(
         run=run,
         games_aborted=games_aborted,

@@ -20,9 +20,12 @@ class _Sink:
     def __init__(self, conn):
         self.conn = conn
         self.received = []
+        self.on_event = None
 
     def __call__(self, seq, event_type, data):
         self.received.append((seq, event_type, data, self.conn.in_transaction))
+        if self.on_event is not None:
+            self.on_event()
 
     @property
     def types(self):
@@ -74,6 +77,21 @@ async def test_deferred_work_runs_only_after_a_commit(store):
         assert ran == []
 
     assert ran == ["committed"]
+
+
+async def test_deferred_process_state_lands_before_the_events_that_describe_it(store):
+    """A subscriber must never see a world less advanced than the event claims.
+    `server_run_started` is the sharp case: its envelope reads the run id that a
+    deferred `set_run_id` installs."""
+    sink = _Sink(store.writer)
+    ran = []
+    sink.on_event = lambda: ran.append("published")
+
+    async with critical_section(store.writer, store.executor, sink) as txn:
+        txn.emit("server_run_started", {})
+        txn.defer(lambda: ran.append("state"))
+
+    assert ran == ["state", "published"]
 
 
 async def test_savepoint_rollback_truncates_rows_events_and_deferred(store):

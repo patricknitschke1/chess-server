@@ -190,7 +190,9 @@ async def test_a_new_run_starts_and_is_announced_after_the_commit(recovered):
 
     assert report.run != previous_run
     assert report.run == current_run_id()
-    assert sink.received == [(0, "server_run_started", {"run": report.run}, False)]
+    assert sink.received == [
+        (0, "server_run_started", {"run_id": report.run, "started_at": RESTART_WALL}, False)
+    ]
 
 
 async def test_process_state_is_cleared_once_and_only_after_the_commit(recovered):

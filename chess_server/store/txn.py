@@ -71,13 +71,21 @@ class Txn:
             await _finish(self.conn, f"RELEASE {name}", self.executor)
 
     def flush(self) -> None:
-        """Assign seq in commit order, fan out, then run the deferred work."""
-        for event_type, data in self.events:
-            self.sink(_take_seq(), event_type, data)
-        self.events.clear()
+        """Apply the deferred process state, then assign seq in emit order and fan out.
+
+        Deferred first for the same reason events wait for the commit: a subscriber
+        must never observe a world less advanced than the event describes. The run id
+        is the sharp case — `server_run_started` rides an envelope stamped with
+        `current_run_id()`, so publishing before `set_run_id` announces the new run
+        under the old one, and a client's {run, seq} gap check cannot tell a restart
+        from a lost event.
+        """
         for fn in self.deferred:
             fn()
         self.deferred.clear()
+        for event_type, data in self.events:
+            self.sink(_take_seq(), event_type, data)
+        self.events.clear()
 
     def discard(self) -> None:
         """A rolled-back unit must consume no seq — that is what the gap check reads."""
