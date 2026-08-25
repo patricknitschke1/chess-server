@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS bots (
   name                   TEXT    NOT NULL UNIQUE,
   owner                  TEXT    NOT NULL,
   token_hash             TEXT    NOT NULL,
-  role                   TEXT    NOT NULL,             -- 'competitor' | 'benchmark' | 'anchor'
+  role                   TEXT    NOT NULL,             -- 'competitor' | 'anchor'
   rating                 INTEGER NOT NULL DEFAULT 1200,
   is_anchor              INTEGER NOT NULL DEFAULT 0,
   wins                   INTEGER NOT NULL DEFAULT 0,

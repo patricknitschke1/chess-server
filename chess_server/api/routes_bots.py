@@ -12,7 +12,6 @@ from chess_server.api.errors import (
     INVALID_JOIN_CODE,
     INVALID_ROLE,
     NAME_TAKEN,
-    SECOND_COMPETITOR,
     ApiError,
 )
 from chess_server.api.models import (
@@ -39,15 +38,14 @@ from chess_server.store.txn import critical_section
 router = APIRouter()
 
 # `anchor` is deliberately absent: anchors are seeded at startup, and role='anchor'
-# is what keeps them out of the one-competitor-per-owner rule and off the rating
-# updates. They do appear on the leaderboard, flagged is_anchor.
-REGISTRABLE_ROLES = ("competitor", "benchmark")
+# is what keeps them off the rating updates. They do appear on the leaderboard,
+# flagged is_anchor.
+REGISTRABLE_ROLES = ("competitor",)
 
 TOKEN_BYTES = 32
 
-# Design §8.2 gives six, and the handler covers six (role spec §5.5).
+# Role spec §5.5.
 WAITING_FOR_PAIRING = "waiting_for_pairing"
-NO_SEAT = "no_seat"
 NOT_YOUR_TURN = "not_your_turn"
 PAUSED = "paused"
 SUPERSEDED = "superseded"
@@ -70,8 +68,6 @@ async def register_bot(payload: RegisterBotRequest, request: Request):
         )
 
     token = secrets.token_urlsafe(TOKEN_BYTES)
-    # Both checks and the insert are one transaction, so two simultaneous
-    # registrations from one owner cannot both find no existing competitor.
     async with critical_section(
         app_state.store.writer, app_state.store.executor, app_state.deps.sink
     ) as txn:
@@ -80,13 +76,6 @@ async def register_bot(payload: RegisterBotRequest, request: Request):
             raise ApiError(
                 status.HTTP_400_BAD_REQUEST, NAME_TAKEN.format(name=payload.name)
             )
-        if payload.role == "competitor":
-            existing = await bots.get_competitor_for_owner(payload.owner)
-            if existing is not None:
-                raise ApiError(
-                    status.HTTP_409_CONFLICT,
-                    SECOND_COMPETITOR.format(existing_name=existing.name),
-                )
         bot_id = await bots.insert_bot(
             name=payload.name,
             owner=payload.owner,
@@ -154,10 +143,6 @@ async def _record_poll(app_state: AppState, bot_id: int) -> None:
 
 
 async def _no_seat_reason(app_state: AppState, bot: BotRow) -> NoGameResponse:
-    if bot.role == "benchmark":
-        # Matchmaking will never consider it, so "waiting" would be a promise
-        # the server does not keep. Checked before `paused` for that reason.
-        return NoGameResponse(reason=NO_SEAT)
     if app_state.matchmaking_paused:
         return NoGameResponse(reason=PAUSED)
     return NoGameResponse(reason=WAITING_FOR_PAIRING)

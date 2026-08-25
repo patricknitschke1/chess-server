@@ -128,15 +128,6 @@ class BotRepo(_Repo):
             await self._one("SELECT * FROM bots WHERE token_hash = ?", (token_hash,)),
         )
 
-    async def get_competitor_for_owner(self, owner: str) -> Optional[BotRow]:
-        return from_row(
-            BotRow,
-            await self._one(
-                "SELECT * FROM bots WHERE owner = ? AND role = 'competitor' ORDER BY id",
-                (owner,),
-            ),
-        )
-
     async def update_token_hash(self, bot_id: int, token_hash: str) -> None:
         await self._write("UPDATE bots SET token_hash = ? WHERE id = ?", (token_hash, bot_id))
 
@@ -175,7 +166,7 @@ class BotRepo(_Repo):
         return cursor.rowcount
 
     async def list_leaderboard(self) -> list[BotRow]:
-        """Design §10.4: benchmarks are hidden, anchors are shown and marked."""
+        """Design §10.4: anchors are shown and marked."""
         rows = await self._all(
             "SELECT * FROM bots WHERE role IN ('competitor', 'anchor')"
             " ORDER BY rating DESC, name"
@@ -186,7 +177,7 @@ class BotRepo(_Repo):
         """§7.5. Everything that polls over HTTP. An anchor never does, so a
         presence event for one would report a fact that cannot change."""
         rows = await self._all(
-            "SELECT * FROM bots WHERE role IN ('competitor', 'benchmark') ORDER BY id"
+            "SELECT * FROM bots WHERE role = 'competitor' ORDER BY id"
         )
         return [from_row(BotRow, row) for row in rows]
 
@@ -210,9 +201,7 @@ class BotRepo(_Repo):
 
 
 def rated_at_creation(white: BotRow, black: BotRow, time_control_ns: int) -> int:
-    """Design §5.3 rules 2-6, first match wins. Rule 1 belongs to finalisation."""
-    if "benchmark" in (white.role, black.role):
-        return 0
+    """Design §5.3 rules 3-6, first match wins. Rule 1 belongs to finalisation."""
     if white.owner == black.owner:
         return 0
     if time_control_ns != RATED_TIME_CONTROL_NS:

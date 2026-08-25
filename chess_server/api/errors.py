@@ -43,13 +43,8 @@ REISSUE_WHILE_SEATED = (
 )
 
 INVALID_JOIN_CODE = "Invalid join code. Ask the workshop host for the current one."
-INVALID_ROLE = "Invalid role '{role}'. Register with role 'competitor' or 'benchmark'."
+INVALID_ROLE = "Invalid role '{role}'. Register with role 'competitor'."
 NAME_TAKEN = "Name '{name}' is already taken. Pick another and register again."
-SECOND_COMPETITOR = (
-    "You already have a competitor bot registered ({existing_name}). Register"
-    " additional bots with role='benchmark' — they can spar with your competitor"
-    " without affecting ratings."
-)
 STRING_SHAPE = (
     "Invalid {field} '{value}'. Use 1-32 characters: letters, digits, spaces,"
     " underscores or hyphens."

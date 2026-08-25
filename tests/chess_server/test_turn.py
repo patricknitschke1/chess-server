@@ -108,14 +108,6 @@ async def test_a_paused_arena_says_so_rather_than_waiting(client, no_hold):
     assert (await poll(client, registered["token"])).json()["reason"] == "paused"
 
 
-async def test_a_benchmark_bot_is_told_it_will_never_be_paired(client, no_hold):
-    """Matchmaking does not consider benchmarks; 'waiting_for_pairing' would be
-    a promise the server never keeps."""
-    registered = await register(client, "sparring", role="benchmark")
-
-    assert (await poll(client, registered["token"])).json()["reason"] == "no_seat"
-
-
 async def test_the_side_not_to_move_is_told_so_and_nothing_is_delivered(
     client, no_hold, store
 ):

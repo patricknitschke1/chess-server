@@ -101,13 +101,12 @@ async def test_insert_game_takes_nanoseconds_and_stores_milliseconds(repos):
 @pytest.mark.parametrize(
     "white_kwargs,black_kwargs,time_control_ns,expected",
     [
-        ({"role": "benchmark"}, {}, RATED_TIME_CONTROL_NS, 0),
         ({"owner": "ada"}, {"owner": "ada"}, RATED_TIME_CONTROL_NS, 0),
         ({}, {}, EXHIBITION_TIME_CONTROL_NS, 0),
         ({"role": "anchor", "is_anchor": 1}, {}, RATED_TIME_CONTROL_NS, 1),
         ({}, {}, RATED_TIME_CONTROL_NS, 1),
     ],
-    ids=["benchmark", "shared_owner", "exhibition", "one_anchor", "two_competitors"],
+    ids=["shared_owner", "exhibition", "one_anchor", "two_competitors"],
 )
 async def test_rated_is_settled_at_creation(
     repos, white_kwargs, black_kwargs, time_control_ns, expected

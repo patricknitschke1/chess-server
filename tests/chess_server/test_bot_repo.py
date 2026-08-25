@@ -40,23 +40,20 @@ async def test_get_by_token_hash_returns_none_for_an_unknown_hash(bots):
 
 
 async def test_presence_candidates_are_the_bots_that_poll(bots):
-    """Anchors are excluded because they never hold an HTTP connection; benchmark
-    bots are included because they do."""
+    """Anchors are excluded because they never hold an HTTP connection."""
     competitor = await _bot(bots, "competitor")
-    benchmark = await _bot(bots, "benchmark", role="benchmark")
     await _bot(bots, "ref-random", role="anchor", is_anchor=1)
 
     found = await bots.list_presence_candidates()
 
-    assert [bot.id for bot in found] == [competitor, benchmark]
+    assert [bot.id for bot in found] == [competitor]
 
 
 async def test_list_pool_candidates_excludes_the_ineligible(store, bots):
     eligible = await _bot(bots, "eligible")
     seated = await _bot(bots, "seated")
-    benchmark = await _bot(bots, "benchmark", role="benchmark")
     stale = await _bot(bots, "stale")
-    for bot_id in (eligible, seated, benchmark):
+    for bot_id in (eligible, seated):
         await bots.update_last_poll(bot_id, WALL, NOW)
     await bots.update_last_poll(stale, WALL, CUTOFF - 1)
     game_id = store.writer.execute(

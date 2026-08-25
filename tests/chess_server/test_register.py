@@ -8,7 +8,6 @@ from chess_server.api.errors import (
     INVALID_JOIN_CODE,
     INVALID_ROLE,
     NAME_TAKEN,
-    SECOND_COMPETITOR,
 )
 from chess_server.store.repositories import BotRepo
 
@@ -33,8 +32,8 @@ async def test_a_wrong_join_code_registers_nothing(client, store):
     assert await _names(store) == set()
 
 
-@pytest.mark.parametrize("role", ["anchor", "wizard"])
-async def test_only_competitor_and_benchmark_are_registrable(client, store, role):
+@pytest.mark.parametrize("role", ["anchor", "benchmark", "wizard"])
+async def test_only_competitor_is_registrable(client, store, role):
     response = await client.post("/bots", json=_payload(role=role))
 
     assert response.status_code == 400
@@ -86,33 +85,15 @@ async def test_a_duplicate_name_is_refused(client):
     assert response.json()["error"] == NAME_TAKEN.format(name="ada")
 
 
-async def test_a_second_competitor_for_one_owner_is_pointed_at_benchmark(client):
-    await client.post("/bots", json=_payload(name="first"))
-
-    response = await client.post("/bots", json=_payload(name="second"))
-
-    assert response.status_code == 409
-    assert response.json()["error"] == SECOND_COMPETITOR.format(existing_name="first")
-    assert "benchmark" in response.json()["error"]
-
-
-async def test_a_benchmark_bot_is_allowed_alongside_the_competitor(client):
-    await client.post("/bots", json=_payload(name="first"))
-
-    response = await client.post("/bots", json=_payload(name="sparring", role="benchmark"))
-
-    assert response.status_code == 201
-
-
-async def test_two_simultaneous_registrations_for_one_owner_leave_one_row(client, store):
+async def test_two_simultaneous_registrations_of_one_name_leave_one_row(client, store):
     """The uniqueness check and the insert are one transaction, so a second
     request cannot pass a check the first has already invalidated."""
     responses = await asyncio.gather(
-        client.post("/bots", json=_payload(name="first")),
-        client.post("/bots", json=_payload(name="second")),
+        client.post("/bots", json=_payload(name="ada")),
+        client.post("/bots", json=_payload(name="ada", owner="grace")),
     )
 
-    assert sorted(response.status_code for response in responses) == [201, 409]
+    assert sorted(response.status_code for response in responses) == [201, 400]
     assert len(await _names(store)) == 1
 
 

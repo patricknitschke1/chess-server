@@ -25,8 +25,8 @@ RESERVED_OWNERS = frozenset({"server"})
 
 def validate_identity(name: str, owner: str) -> None:
     """Case-folded reservations: without them an attendee registers as an anchor,
-    and the leaderboard, the anchor gate and /admin/consistency all read a bot
-    that is not what they think it is."""
+    and the leaderboard and the anchor gate both read a bot that is not what they
+    think it is."""
     for field, value in (("name", name), ("owner", owner)):
         if not IDENTIFIER.match(value):
             raise ApiError(

@@ -70,11 +70,10 @@ async def test_a_non_numeric_id_is_422(client, path):
 
 # --- 2. the leaderboard --------------------------------------------------------
 
-async def test_the_leaderboard_hides_benchmarks_and_marks_anchors(
+async def test_the_leaderboard_marks_anchors(
     client, seed_bots
 ):
     await seed_bots("comp-a", rating=1300)
-    await seed_bots("spar", role="benchmark", rating=1900)
     await seed_bots("ref-random", role="anchor", rating=800, is_anchor=1)
 
     body = (await client.get("/leaderboard")).json()
@@ -319,11 +318,10 @@ async def test_the_read_routes_answer_while_the_writer_holds_a_transaction(
         ).status_code == status.HTTP_200_OK
 
 
-async def test_bot_repo_leaderboard_includes_anchors_but_not_benchmarks(
+async def test_bot_repo_leaderboard_includes_anchors(
     store, seed_bots
 ):
     await seed_bots("comp")
-    await seed_bots("spar", role="benchmark")
     await seed_bots("ref-random", role="anchor", is_anchor=1)
 
     rows = await BotRepo(store.reader, store.executor).list_leaderboard()

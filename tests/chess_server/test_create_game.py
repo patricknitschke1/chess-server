@@ -120,7 +120,6 @@ async def test_both_clocks_start_at_three_minutes_in_milliseconds(store, deps, s
     "names,role,owner,time_control_ns,expected",
     [
         (("a", "b"), "competitor", None, RATED_TIME_CONTROL_NS, 1),
-        (("a", "b"), "benchmark", None, RATED_TIME_CONTROL_NS, 0),
         (("a", "b"), "competitor", "same", RATED_TIME_CONTROL_NS, 0),
         (("a", "b"), "competitor", None, EXHIBITION_TIME_CONTROL_NS, 0),
     ],

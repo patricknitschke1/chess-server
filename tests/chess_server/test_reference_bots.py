@@ -102,8 +102,7 @@ async def test_seeded_anchors_carry_the_anchor_columns(store):
 async def test_seeded_anchors_appear_on_the_leaderboard_and_are_marked(store):
     """Plan task 14 and `LeaderboardEntry.is_anchor`: anchors are shown and marked,
     not hidden. Design §10.3's parenthetical still says the leaderboard filters to
-    `competitor` — if it did, `is_anchor` on the entry would have no purpose.
-    Benchmarks are the ones design §10.4 hides."""
+    `competitor` — if it did, `is_anchor` on the entry would have no purpose."""
     await seed_anchors(store.writer, store.executor)
     rows = await BotRepo(store.writer, store.executor).list_leaderboard()
     assert rows != []

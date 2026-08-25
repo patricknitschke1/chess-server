@@ -42,17 +42,6 @@ async def test_presence_is_edge_triggered_in_both_directions(
     assert state.connected == set()
 
 
-async def test_a_benchmark_bot_that_polls_is_present(deps, sink, seed_bots, poll):
-    """A benchmark bot is an HTTP client like any other. Reading the leaderboard
-    query here would silently exclude it from presence entirely."""
-    (bot,) = await seed_bots("spar-partner", role="benchmark")
-    await poll(bot.id)
-
-    await tick(deps, [step_presence])
-
-    assert sink.of("bot_connected") == [{"bot_id": bot.id, "bot_name": "spar-partner"}]
-
-
 async def test_the_presence_step_writes_nothing(store, deps, seed_bots, poll):
     (bot,) = await seed_bots("bot-a")
     await poll(bot.id)
