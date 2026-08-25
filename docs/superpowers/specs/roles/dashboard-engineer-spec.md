@@ -1,5 +1,29 @@
 # Dashboard Engineer — Role Specification
 
+> **MVP SCOPE — 2026-08-25. This overrides the reduction note and everything below it.**
+>
+> What is built in `web/`:
+> - **A grid of four active boards**, not a single featured board. The server's featured game takes slot 0; the remaining three are filled from `active_games` in `GET /state`. Slot assignment is *stable*: a surviving game keeps its slot, and only the vacated slot refills when a game ends. Reshuffling four boards because one game ended is unwatchable from the back of the room.
+> - The leaderboard rail (top 10) and a results ticker.
+> - The stale-tick health banner (`last_tick_age_ms > 5000`), which also covers SSE disconnection.
+>
+> **My Bot mode is CUT** (design §14) — no toggle, no per-bot view, no rating sparkline, no leaderboard sorting, no `?bot=` badge, no arena-report panel. §2's "My Bot mode" and the whole `my-bot-mode` container in §3 are dead text.
+>
+> The single-featured-board layout described in §2 and §3 is **superseded** by the four-board grid. The mode toggle in §3's HTML skeleton is not built.
+>
+> Files as built: `index.html`, `style.css`, `pure.js` (DOM-free helpers), `board.js`, `leaderboard.js`, `health.js`, `dashboard.js`. `pure.js` exists because there is no JS test runner here: FEN → 8×8 grid, clock formatting, numeric `seq` comparison and slot assignment are pure functions that can be exercised from `node -e` without a DOM.
+>
+> Served as static files from `/dashboard`, mounted in `chess_server/api/app.py` after every router so it cannot shadow an API route.
+>
+> **Where the built server contradicts this document, the built server wins.** As built:
+> - SSE frames carry a named `event:` field, so `EventSource.onmessage` never fires. §4's example is wrong; the client registers one `addEventListener` per event type.
+> - `move_played` for non-featured games is coalesced to 2 Hz, so **seq gaps are normal** and cannot mean "resynchronise". Boards are therefore always rendered from the event's `fen`, never by applying moves, and resync is driven by `run` change, disconnect, an unknown `game_id`, and a 15s `/state` refresh. The 15s refresh is also what re-runs the server's featured selection, which is only recomputed inside `GET /state`.
+> - Competitor-vs-competitor games are created with `rated: false`; only games against an anchor move a rating. The rated/unrated colour split in the ticker is therefore **live, not cut** — the reduction note above is wrong on that point.
+> - `result` is `white_win` / `black_win` / `draw`, not `1-0` / `0-1` / `1/2-1/2`.
+> - `game_created` and `game_started` carry no FEN or ratings, so a newly seen game is filled in from `/state` rather than from the event.
+>
+> Unchanged and not negotiable: attendee-controlled strings (`bot_name`, `owner`) are written with `textContent`; `innerHTML` never touches them.
+
 > **SCOPE REDUCTION — read this first, it overrides everything below.**
 >
 > **Build Big Screen only.** My Bot mode is **cut** (design §14), and with it the live-games grid, click-to-watch, the `?bot=` "YOU" badge, the personal rating sparkline and the local-arena panel. Roughly a third of this document describes those; treat every mention of "My Bot", "watching", "grid cell" and "arena report" as cut.

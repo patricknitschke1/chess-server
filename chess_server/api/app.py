@@ -8,10 +8,12 @@ be paired into a game recovery is about to abort.
 import asyncio
 import contextlib
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import AsyncIterator, Optional
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from chess_server.api import (
     admin,
@@ -30,6 +32,8 @@ from chess_server.engine.ticker import run_ticker
 from chess_server.engine.wall import utc_now_iso
 from chess_server.store.db import open_store
 from chess_server.store.recovery import recover
+
+WEB_DIR = Path(__file__).resolve().parents[2] / "web"
 
 
 def build_state(settings: Settings) -> AppState:
@@ -102,6 +106,12 @@ def create_app(app_state: AppState) -> FastAPI:
     app.include_router(routes_public.router)
     app.include_router(health.router)
     app.include_router(admin.router)
+
+    # Mounted last and under its own prefix so it can never shadow an API route.
+    if WEB_DIR.is_dir():
+        app.mount(
+            "/dashboard", StaticFiles(directory=WEB_DIR, html=True), name="dashboard"
+        )
 
     @app.exception_handler(ApiError)
     async def _api_error(request: Request, exc: ApiError) -> JSONResponse:
