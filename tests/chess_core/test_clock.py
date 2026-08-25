@@ -376,7 +376,6 @@ def test_constants_exist():
     assert clock.AGENT_DELIVERY_GRACE_NS == 60_000_000_000
     assert clock.AGENT_AUTO_RELEASE_NS == 45_000_000_000
     assert clock.POLL_RECENCY_NS == 5_000_000_000
-    assert clock.CHALLENGE_TTL_NS == 60_000_000_000
     assert clock.POLL_HOLD_NS == 20_000_000_000
     assert clock.TICK_INTERVAL_NS == 1_000_000_000
 
@@ -398,7 +397,6 @@ def test_clock_is_the_sole_declaration_site_for_its_constants():
         "AGENT_DELIVERY_GRACE_NS",
         "AGENT_AUTO_RELEASE_NS",
         "POLL_RECENCY_NS",
-        "CHALLENGE_TTL_NS",
         "POLL_HOLD_NS",
         "TICK_INTERVAL_NS",
     ):
@@ -482,7 +480,7 @@ def test_remaining_ns_does_not_run_before_delivery():
 
 
 def test_is_within_boundary_is_inclusive():
-    """Poll recency and challenge TTL both hinge on this boundary."""
+    """Poll recency hinges on this boundary."""
     now = 10_000_000_000
     window = 5_000_000_000
 

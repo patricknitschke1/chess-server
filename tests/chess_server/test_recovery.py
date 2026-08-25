@@ -11,7 +11,7 @@ from chess_core import (
 )
 from chess_server.engine import state
 from chess_server.store.recovery import recover, recover_locked
-from chess_server.store.repositories import BotRepo, ChallengeRepo, GameRepo, SeatRepo
+from chess_server.store.repositories import BotRepo, GameRepo, SeatRepo
 from chess_server.store.run import current_run_id
 from chess_server.store.txn import critical_section, reset_seq
 
@@ -53,12 +53,11 @@ def repos(store):
         BotRepo(store.writer, store.executor),
         GameRepo(store.writer, store.executor),
         SeatRepo(store.writer, store.executor),
-        ChallengeRepo(store.writer, store.executor),
     )
 
 
 async def _dirty_database(repos):
-    bots, games, seats, challenges = repos
+    bots, games, seats = repos
     made = {}
     for name in ("a", "b", "c", "d", "agent_bot"):
         bot_id = await bots.insert_bot(
@@ -98,18 +97,7 @@ async def _dirty_database(repos):
         for name in ({"pending": ("a", "b"), "active": ("c", "d")}[label]):
             await seats.insert_seat(made[name].id, game_ids[label])
 
-    challenge_ids = {}
-    for status in ("open", "queued", "consumed"):
-        challenge_ids[status] = await challenges.insert_challenge(
-            challenger_bot_id=made["a"].id,
-            opponent_bot_id=made["b"].id,
-            status=status,
-            time_control_ns=RATED_TIME_CONTROL_NS,
-            increment_ns=RATED_INCREMENT_NS,
-            created_at=WALL,
-            created_mono=OLD_MONO,
-        )
-    return made, game_ids, challenge_ids
+    return made, game_ids
 
 
 async def _recover(store, sink=None, cleared=None):
@@ -133,8 +121,8 @@ async def recovered(store, repos):
 
 
 async def test_live_games_are_aborted_unrated_with_an_end_time(repos, recovered):
-    _, games, _, _ = repos
-    (_, game_ids, _), _, _, _, _ = recovered
+    _, games, _ = repos
+    (_, game_ids), _, _, _, _ = recovered
 
     for label in ("pending", "active"):
         row = await games.get_by_id(game_ids[label])
@@ -145,8 +133,8 @@ async def test_live_games_are_aborted_unrated_with_an_end_time(repos, recovered)
 
 
 async def test_a_finished_game_is_left_exactly_as_it_was(store, repos):
-    _, games, _, _ = repos
-    _, game_ids, _ = await _dirty_database(repos)
+    _, games, _ = repos
+    _, game_ids = await _dirty_database(repos)
     before = dict(await games._one("SELECT * FROM games WHERE id = ?", (game_ids["finished"],)))
 
     await _recover(store)
@@ -156,18 +144,8 @@ async def test_a_finished_game_is_left_exactly_as_it_was(store, repos):
 
 
 async def test_every_seat_is_freed(repos, recovered):
-    _, _, seats, _ = repos
+    _, _, seats = repos
     assert await seats.list_seated_bot_ids() == []
-
-
-async def test_non_terminal_challenges_expire_and_settled_ones_do_not(repos, recovered):
-    _, _, _, challenges = repos
-    (_, _, challenge_ids), _, _, _, _ = recovered
-
-    for status in ("open", "queued"):
-        row = await challenges.get_by_id(challenge_ids[status])
-        assert (row.status, row.reason) == ("expired", TerminationReason.SERVER_RESTART.value)
-    assert (await challenges.get_by_id(challenge_ids["consumed"])).status == "consumed"
 
 
 async def test_last_poll_mono_is_null_for_every_bot(store, recovered):
@@ -215,7 +193,7 @@ async def test_a_lower_monotonic_baseline_cannot_resurrect_the_whole_pool(
     store, repos, recovered
 ):
     """Recovery nulled the column, so no comparison against a dead baseline happens."""
-    bots, _, _, _ = repos
+    bots, _, _ = repos
     seated = store.reader.execute(
         "SELECT COUNT(*) AS n FROM bots WHERE last_poll_mono IS NOT NULL"
     ).fetchone()

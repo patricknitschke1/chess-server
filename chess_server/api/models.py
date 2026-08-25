@@ -106,47 +106,6 @@ class LegalMovesResponse(BaseModel):
     fen: str
 
 
-class CreateChallengeRequest(BaseModel):
-    opponent: str
-    time_control: str = "rated"
-
-
-class CreateChallengeResponse(BaseModel):
-    challenge_id: int
-    challenger_bot_id: int
-    opponent_bot_id: int
-    status: str
-    time_control_ms: int
-    increment_ms: int
-
-
-class AcceptChallengeResponse(BaseModel):
-    challenge_id: int
-    status: str
-
-
-class DeclineChallengeResponse(BaseModel):
-    challenge_id: int
-    status: str
-
-
-class ChallengeEntry(BaseModel):
-    challenge_id: int
-    challenger_bot_id: int
-    challenger_bot_name: str
-    opponent_bot_id: int
-    opponent_bot_name: str
-    status: str
-    time_control_ms: int
-    increment_ms: int
-    created_at: str
-
-
-class ChallengesInboxResponse(BaseModel):
-    incoming: List[ChallengeEntry]
-    outgoing: List[ChallengeEntry]
-
-
 class LeaderboardEntry(BaseModel):
     bot_id: int
     bot_name: str

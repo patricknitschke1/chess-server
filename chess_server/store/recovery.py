@@ -6,7 +6,7 @@ from typing import Callable
 
 from chess_core import TerminationReason
 
-from chess_server.store.repositories import BotRepo, ChallengeRepo, GameRepo, SeatRepo
+from chess_server.store.repositories import BotRepo, GameRepo, SeatRepo
 from chess_server.store.run import new_run_id, set_run_id
 from chess_server.store.txn import EventSink, Txn, _drop, critical_section, reset_seq
 
@@ -18,7 +18,6 @@ class RecoveryReport:
     run: str
     games_aborted: int
     seats_freed: int
-    challenges_expired: int
     bots_cleared: int
 
 
@@ -28,7 +27,6 @@ async def recover_locked(
     conn, executor = txn.conn, txn.executor
     games_aborted = await GameRepo(conn, executor).abort_all_non_terminal(RESTART, now_wall)
     seats_freed = await SeatRepo(conn, executor).delete_all_seats()
-    challenges_expired = await ChallengeRepo(conn, executor).expire_all_non_terminal(RESTART)
     bots_cleared = await BotRepo(conn, executor).clear_monotonic_state()
 
     run = new_run_id()
@@ -40,7 +38,6 @@ async def recover_locked(
         run=run,
         games_aborted=games_aborted,
         seats_freed=seats_freed,
-        challenges_expired=challenges_expired,
         bots_cleared=bots_cleared,
     )
 

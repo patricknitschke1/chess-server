@@ -64,11 +64,6 @@ PART2_FIELDS = {
     "bot_registered": {"bot_id", "bot_name", "role", "rating"},
     "bot_connected": {"bot_id", "bot_name"},
     "bot_disconnected": {"bot_id", "bot_name"},
-    "challenge_updated": {
-        "challenge_id", "status", "challenger_bot_id", "challenger_bot_name",
-        "opponent_bot_id", "opponent_bot_name", "time_control_ms",
-        "increment_ms", "game_id", "reason",
-    },
 }
 
 

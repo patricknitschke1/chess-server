@@ -45,7 +45,7 @@ CREATE TABLE IF NOT EXISTS games (
   turn_started_mono    INTEGER,
   delivered_to_mover   INTEGER NOT NULL DEFAULT 0,
   rated                INTEGER NOT NULL,
-  source               TEXT    NOT NULL,   -- 'matchmaker' | 'challenge'
+  source               TEXT    NOT NULL,   -- 'matchmaker'
   white_strikes        INTEGER NOT NULL DEFAULT 0,
   black_strikes        INTEGER NOT NULL DEFAULT 0,
   created_at           TEXT    NOT NULL,
@@ -83,20 +83,6 @@ CREATE TABLE IF NOT EXISTS rating_history (
   delta         INTEGER NOT NULL,
   ts            TEXT    NOT NULL,
   UNIQUE (game_id, bot_id)
-);
-
-CREATE TABLE IF NOT EXISTS challenges (
-  id                INTEGER PRIMARY KEY,
-  challenger_bot_id INTEGER NOT NULL REFERENCES bots(id),
-  opponent_bot_id   INTEGER NOT NULL REFERENCES bots(id),
-  status            TEXT    NOT NULL,   -- 'open'|'queued'|'consumed'|'declined'|'expired'
-  reason            TEXT,               -- 'seat_unavailable'|'timeout'|'server_restart'|NULL
-  time_control_ms   INTEGER NOT NULL,
-  increment_ms      INTEGER NOT NULL,
-  created_at        TEXT    NOT NULL,   -- wall clock, for display
-  created_mono      INTEGER NOT NULL,   -- monotonic ns, for CHALLENGE_TTL_NS
-  resolved_at       TEXT,
-  game_id           INTEGER REFERENCES games(id)
 );
 """
 

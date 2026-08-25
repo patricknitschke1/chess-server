@@ -12,7 +12,6 @@ import chess
 from chess_core import (
     AGENT_AUTO_RELEASE_NS,
     AGENT_DELIVERY_GRACE_NS,
-    CHALLENGE_TTL_NS,
     DELIVERY_GRACE_NS,
     EXHIBITION_TIME_CONTROL_NS,
     RATED_INCREMENT_NS,
@@ -46,12 +45,11 @@ from chess_server.engine.wall import utc_now_iso
 from chess_server.store.cas import CASConflict
 from chess_server.store.repositories import (
     BotRepo,
-    ChallengeRepo,
     GameRepo,
     SeatRepo,
     _clock_from_game,
 )
-from chess_server.store.rows import ChallengeRow, GameRow
+from chess_server.store.rows import GameRow
 from chess_server.store.txn import Txn, critical_section
 
 logger = logging.getLogger(__name__)
@@ -88,8 +86,7 @@ async def _unit(txn: Txn, name: str) -> AsyncIterator[None]:
 
     Design §4.3 argued this for pairing; it holds identically for every other
     per-game action. Without it one conflict at the flag step silently discards
-    every pairing and challenge the same tick made, because a rolled-back CAS
-    is not an error.
+    every pairing the same tick made, because a rolled-back CAS is not an error.
     """
     if not _SAFE_SAVEPOINT.match(name):
         raise ValueError(f"savepoint name reaches SQL text verbatim: {name!r}")
@@ -101,78 +98,6 @@ async def _unit(txn: Txn, name: str) -> AsyncIterator[None]:
 
 
 EXHIBITION_TIME_CONTROL_MS = ns_to_ms(EXHIBITION_TIME_CONTROL_NS)
-
-
-async def challenge_event(txn: Txn, challenge: ChallengeRow) -> dict:
-    """The one definition of the `challenge_updated` payload. The routes emit it too
-    (§8.4), and a second copy there is how two sites end up disagreeing about a
-    field neither of them changed."""
-    bots = BotRepo(txn.conn, txn.executor)
-    challenger = await bots.get_by_id(challenge.challenger_bot_id)
-    opponent = await bots.get_by_id(challenge.opponent_bot_id)
-    return {
-        "challenge_id": challenge.id,
-        "status": challenge.status,
-        "challenger_bot_id": challenger.id,
-        "challenger_bot_name": challenger.name,
-        "opponent_bot_id": opponent.id,
-        "opponent_bot_name": opponent.name,
-        "time_control_ms": challenge.time_control_ms,
-        "increment_ms": challenge.increment_ms,
-        "game_id": challenge.game_id,
-        "reason": challenge.reason,
-    }
-
-
-async def step_challenges(deps: EngineDeps, txn: Txn, now_mono: int) -> None:
-    """Role spec §7.2 (challenge half). Consumed before pairing, so an accepted
-    challenge always beats matchmaking to the seat."""
-    challenges = ChallengeRepo(txn.conn, txn.executor)
-    bots = BotRepo(txn.conn, txn.executor)
-    seats = SeatRepo(txn.conn, txn.executor)
-
-    for challenge in await challenges.list_queued():
-        async with _unit(txn, f"challenge_{challenge.id}"):
-            exhibition = challenge.time_control_ms == EXHIBITION_TIME_CONTROL_MS
-            # The challenger takes White; design §12 does not pin the colours.
-            participants = [
-                await bots.get_by_id(challenge.challenger_bot_id),
-                await bots.get_by_id(challenge.opponent_bot_id),
-            ]
-            free = True
-            for bot in participants:
-                seated = await seats.get_seat(bot.id) is not None
-                # Design §13.3: an agent may only be handed the controls in an
-                # exhibition game.
-                if seated or not (exhibition or bot.controller == "client"):
-                    free = False
-            if not free:
-                await challenges.cas_set_status(
-                    challenge.id, challenge.status, "expired",
-                    reason="seat_unavailable", resolved_at=utc_now_iso(),
-                )
-                txn.emit(
-                    "challenge_updated",
-                    await challenge_event(txn, await challenges.get_by_id(challenge.id)),
-                )
-                continue
-
-            game_id = await create_game_locked(
-                deps, txn, participants[0], participants[1],
-                time_control_ns=ms_to_ns(challenge.time_control_ms),
-                increment_ns=ms_to_ns(challenge.increment_ms),
-                source="challenge",
-                now_mono=now_mono,
-            )
-            await challenges.cas_set_status(
-                challenge.id, challenge.status, "consumed",
-                resolved_at=utc_now_iso(), game_id=game_id,
-            )
-            txn.emit(
-                "challenge_updated",
-                await challenge_event(txn, await challenges.get_by_id(challenge.id)),
-            )
-
 
 
 async def step_matchmaking(deps: EngineDeps, txn: Txn, now_mono: int) -> None:
@@ -320,23 +245,6 @@ async def step_agent_release(deps: EngineDeps, txn: Txn, now_mono: int) -> None:
             txn.defer(lambda bot_id=bot.id: deps.wake(bot_id))
 
 
-async def step_challenge_ttl(deps: EngineDeps, txn: Txn, now_mono: int) -> None:
-    """Role spec §7.5, design §12. Only `open` challenges age out; a `queued` one
-    has been accepted and belongs to step 1."""
-    challenges = ChallengeRepo(txn.conn, txn.executor)
-    cutoff_mono = window_start_mono(now_mono, CHALLENGE_TTL_NS)
-    for challenge in await challenges.list_expired_open(cutoff_mono):
-        async with _unit(txn, f"ttl_{challenge.id}"):
-            await challenges.cas_set_status(
-                challenge.id, challenge.status, "expired",
-                reason="timeout", resolved_at=utc_now_iso(),
-            )
-            txn.emit(
-                "challenge_updated",
-                await challenge_event(txn, await challenges.get_by_id(challenge.id)),
-            )
-
-
 async def step_presence(deps: EngineDeps, txn: Txn, now_mono: int) -> None:
     """Role spec §7.5. Edge-triggered against `state.connected`, so each event fires
     once per transition rather than once per tick. Writes no rows at all.
@@ -359,16 +267,13 @@ async def step_presence(deps: EngineDeps, txn: Txn, now_mono: int) -> None:
             txn.defer(lambda bot_id=bot.id: state.connected.discard(bot_id))
 
 
-# Role spec §7: the order is a production fact, not a test argument. Consumption
-# precedes pairing so an accepted challenge always beats matchmaking to the seat.
+# Role spec §7: the order is a production fact, not a test argument.
 STEPS: list[Step] = [
-    step_challenges,
     step_matchmaking,
     step_anchor_moves,
     step_delivery_grace,
     step_flag,
     step_agent_release,
-    step_challenge_ttl,
     step_presence,
 ]
 

@@ -1,9 +1,8 @@
-"""Test task 17: agent auto-release, challenge TTL and edge-triggered presence (§7.5)."""
+"""Test task 17: agent auto-release and edge-triggered presence (§7.5)."""
 import pytest
 
 from chess_core import (
     AGENT_AUTO_RELEASE_NS,
-    CHALLENGE_TTL_NS,
     RATED_INCREMENT_NS,
     RATED_TIME_CONTROL_NS,
 )
@@ -13,37 +12,13 @@ from chess_server.engine.ticker import (
     TickerMetrics,
     _tick_once,
     step_agent_release,
-    step_challenge_ttl,
     step_matchmaking,
     step_presence,
 )
-from chess_server.store.repositories import ChallengeRepo
 from chess_server.store.txn import critical_section
 
 WALL = "2026-08-24T00:00:00Z"
 ONE_SECOND_NS = 1_000_000_000
-
-
-@pytest.fixture
-def challenges(store):
-    return ChallengeRepo(store.writer, store.executor)
-
-
-@pytest.fixture
-def open_challenge(store, deps, challenges):
-    async def _open(challenger, opponent, *, status="open", at=None):
-        async with critical_section(store.writer, store.executor):
-            return await challenges.insert_challenge(
-                challenger_bot_id=challenger.id,
-                opponent_bot_id=opponent.id,
-                status=status,
-                time_control_ns=RATED_TIME_CONTROL_NS,
-                increment_ns=RATED_INCREMENT_NS,
-                created_at=WALL,
-                created_mono=deps.now_mono() if at is None else at,
-            )
-
-    return _open
 
 
 @pytest.fixture
@@ -104,26 +79,6 @@ async def test_an_agent_with_no_recorded_action_is_released_immediately(
 
     await tick(deps, [step_agent_release])
     assert (await bot_repo.get_by_id(bot.id)).controller == "client"
-
-
-async def test_an_open_challenge_times_out_and_a_queued_one_is_untouched(
-    deps, clock, sink, challenges, seed_bots, open_challenge
-):
-    a, b, c, d = await seed_bots("bot-a", "bot-b", "bot-c", "bot-d")
-    stale = await open_challenge(a, b, at=clock() - CHALLENGE_TTL_NS - ONE_SECOND_NS)
-    fresh = await open_challenge(c, d)
-    queued = await open_challenge(a, d, status="queued",
-                                  at=clock() - CHALLENGE_TTL_NS - ONE_SECOND_NS)
-
-    await tick(deps, [step_challenge_ttl])
-
-    expired = await challenges.get_by_id(stale)
-    assert (expired.status, expired.reason) == ("expired", "timeout")
-    assert (await challenges.get_by_id(fresh)).status == "open"
-    assert (await challenges.get_by_id(queued)).status == "queued"
-    updates = sink.of("challenge_updated")
-    assert len(updates) == 1
-    assert (updates[0]["challenge_id"], updates[0]["reason"]) == (stale, "timeout")
 
 
 async def test_presence_is_edge_triggered_in_both_directions(

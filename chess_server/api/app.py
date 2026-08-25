@@ -17,7 +17,6 @@ from chess_server.api import (
     admin,
     health,
     routes_bots,
-    routes_challenges,
     routes_play,
     routes_public,
 )
@@ -100,7 +99,6 @@ def create_app(app_state: AppState) -> FastAPI:
     app.state.arena = app_state
     app.include_router(routes_bots.router)
     app.include_router(routes_play.router)
-    app.include_router(routes_challenges.router)
     app.include_router(routes_public.router)
     app.include_router(health.router)
     app.include_router(admin.router)

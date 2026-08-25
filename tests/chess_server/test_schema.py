@@ -100,8 +100,6 @@ def test_deferred_tables_are_absent(conn):
     "table,column",
     [
         ("games", "to_move"),
-        ("challenges", "reason"),
-        ("challenges", "created_mono"),
         ("bots", "last_color"),
         ("bots", "white_count"),
         ("bots", "last_opponent_id"),

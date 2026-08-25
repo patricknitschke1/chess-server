@@ -17,7 +17,6 @@ from chess_core import (
 from chess_server.store.cas import assert_cas
 from chess_server.store.rows import (
     BotRow,
-    ChallengeRow,
     GameRow,
     MoveRow,
     RatingHistoryRow,
@@ -501,96 +500,3 @@ class RatingHistoryRepo(_Repo):
             "SELECT * FROM rating_history WHERE bot_id = ? ORDER BY ts, game_id", (bot_id,)
         )
         return [from_row(RatingHistoryRow, row) for row in rows]
-
-
-NON_TERMINAL_CHALLENGES = ("open", "queued")
-
-
-class ChallengeRepo(_Repo):
-    async def insert_challenge(
-        self,
-        challenger_bot_id: int,
-        opponent_bot_id: int,
-        status: str,
-        time_control_ns: int,
-        increment_ns: int,
-        created_at: str,
-        created_mono: int,
-    ) -> int:
-        """created_at is wall clock for display; created_mono is what the TTL reads (§3.3)."""
-        cursor = await self._write(
-            "INSERT INTO challenges (challenger_bot_id, opponent_bot_id, status,"
-            " time_control_ms, increment_ms, created_at, created_mono)"
-            " VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (
-                challenger_bot_id,
-                opponent_bot_id,
-                status,
-                ns_to_ms(time_control_ns),
-                ns_to_ms(increment_ns),
-                created_at,
-                created_mono,
-            ),
-        )
-        return cursor.lastrowid
-
-    async def cas_set_status(
-        self,
-        challenge_id: int,
-        from_status: str,
-        status: str,
-        reason: Optional[str] = None,
-        resolved_at: Optional[str] = None,
-        game_id: Optional[int] = None,
-    ) -> None:
-        cursor = await self._write(
-            "UPDATE challenges"
-            "   SET status = ?, reason = COALESCE(?, reason),"
-            "       resolved_at = COALESCE(?, resolved_at), game_id = COALESCE(?, game_id)"
-            " WHERE id = ? AND status = ?",
-            (status, reason, resolved_at, game_id, challenge_id, from_status),
-        )
-        assert_cas(cursor)
-
-    async def get_by_id(self, challenge_id: int) -> Optional[ChallengeRow]:
-        return from_row(
-            ChallengeRow,
-            await self._one("SELECT * FROM challenges WHERE id = ?", (challenge_id,)),
-        )
-
-    async def get_open_outgoing(self, challenger_bot_id: int) -> Optional[ChallengeRow]:
-        return from_row(
-            ChallengeRow,
-            await self._one(
-                "SELECT * FROM challenges WHERE challenger_bot_id = ?"
-                " AND status IN (?, ?) ORDER BY id",
-                (challenger_bot_id, *NON_TERMINAL_CHALLENGES),
-            ),
-        )
-
-    async def list_inbox(self, opponent_bot_id: int) -> list[ChallengeRow]:
-        rows = await self._all(
-            "SELECT * FROM challenges WHERE opponent_bot_id = ? AND status = 'open' ORDER BY id",
-            (opponent_bot_id,),
-        )
-        return [from_row(ChallengeRow, row) for row in rows]
-
-    async def list_queued(self) -> list[ChallengeRow]:
-        rows = await self._all(
-            "SELECT * FROM challenges WHERE status = 'queued' ORDER BY id"
-        )
-        return [from_row(ChallengeRow, row) for row in rows]
-
-    async def list_expired_open(self, cutoff_mono: int) -> list[ChallengeRow]:
-        rows = await self._all(
-            "SELECT * FROM challenges WHERE status = 'open' AND created_mono <= ? ORDER BY id",
-            (cutoff_mono,),
-        )
-        return [from_row(ChallengeRow, row) for row in rows]
-
-    async def expire_all_non_terminal(self, reason: str) -> int:
-        cursor = await self._write(
-            "UPDATE challenges SET status = 'expired', reason = ? WHERE status IN (?, ?)",
-            (reason, *NON_TERMINAL_CHALLENGES),
-        )
-        return cursor.rowcount

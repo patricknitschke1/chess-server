@@ -85,21 +85,6 @@ class RatingHistoryRow:
     ts: str
 
 
-@dataclass
-class ChallengeRow:
-    id: int
-    challenger_bot_id: int
-    opponent_bot_id: int
-    status: str
-    reason: Optional[str]
-    time_control_ms: int
-    increment_ms: int
-    created_at: str
-    created_mono: int
-    resolved_at: Optional[str]
-    game_id: Optional[int]
-
-
 def from_row(cls: type[T], row: Optional[sqlite3.Row]) -> Optional[T]:
     if row is None:
         return None
