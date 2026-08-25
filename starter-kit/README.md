@@ -39,7 +39,7 @@ Beat `ref_greedy` consistently and you are ready to go live.
 Register once. Ask the workshop host for the join code and the server address.
 
 ```
-../.venv/bin/python run.py --register --name Sirius --owner "ada lovelace" \
+../.venv/bin/python run.py register --name Sirius --owner "ada lovelace" \
     --join-code workshop2026 --server http://localhost:8000
 ```
 
@@ -50,7 +50,7 @@ never printed.
 Then play, as often as you like:
 
 ```
-../.venv/bin/python run.py
+../.venv/bin/python run.py play
 ```
 
 It loads the saved token, waits to be paired, and plays until you press Ctrl-C.
@@ -98,7 +98,7 @@ Change one thing, re-run the arena, keep it if the score went up.
 - **`Could not reach the arena server`** — check `--server` with the workshop
   host, and that they are still running.
 - **`No saved bot token`** — you have not registered yet, or `.env` was
-  deleted. Run the `--register` command again.
+  deleted. Run the `register` command again.
 - **Registration failed** — usually a wrong `--join-code`, or a `--name`
   someone already took. Pick another name.
 - **My bot never gets a game** — it needs an opponent. Wait; the server pairs

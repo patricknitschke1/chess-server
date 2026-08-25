@@ -1,7 +1,7 @@
 """Register your bot, then play. You never edit this file — only `bot.py`.
 
-    ../.venv/bin/python run.py --register --name Sirius --owner "ada lovelace"
-    ../.venv/bin/python run.py
+    ../.venv/bin/python run.py register --name Sirius --owner "ada lovelace"
+    ../.venv/bin/python run.py play
 
 Registration saves your token to `.env` next to this file. That token *is* your
 bot's identity on the leaderboard, so it is written once and never printed
@@ -24,7 +24,7 @@ SERVER_KEY = "ARENA_SERVER"
 JOIN_CODE_KEY = "ARENA_JOIN_CODE"
 
 REGISTER_HINT = (
-    'Register first: python run.py --register --name YourBot --owner "your name"'
+    'Register first: python run.py register --name YourBot --owner "your name"'
 )
 
 
@@ -64,11 +64,17 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         prog="python run.py",
         description="Register your bot with the arena, or play with it.",
     )
-    parser.add_argument("--register", action="store_true", help="register a new bot")
-    parser.add_argument("--name", help="your bot's name, shown on the leaderboard")
-    parser.add_argument("--owner", help="your own name — must be unique in the room")
-    parser.add_argument("--join-code", help="ask the workshop host")
-    parser.add_argument("--server", help=f"arena address (default {DEFAULT_SERVER})")
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    register = subparsers.add_parser("register", help="register a new bot")
+    register.add_argument("--name", help="your bot's name, shown on the leaderboard")
+    register.add_argument("--owner", help="your own name — must be unique in the room")
+    register.add_argument("--join-code", help="ask the workshop host")
+    register.add_argument("--server", help=f"arena address (default {DEFAULT_SERVER})")
+
+    play = subparsers.add_parser("play", help="play with your registered bot")
+    play.add_argument("--server", help=f"arena address (default {DEFAULT_SERVER})")
+
     return parser.parse_args(argv)
 
 
@@ -76,7 +82,7 @@ def resolve(args: argparse.Namespace, env: dict) -> Config:
     """Flags win over the saved `.env`, which wins over the default."""
     return Config(
         server=args.server or env.get(SERVER_KEY) or DEFAULT_SERVER,
-        join_code=args.join_code or env.get(JOIN_CODE_KEY),
+        join_code=getattr(args, "join_code", None) or env.get(JOIN_CODE_KEY),
         token=env.get(TOKEN_KEY),
     )
 
@@ -129,7 +135,7 @@ def do_register(args: argparse.Namespace, config: Config, client: ChessClient,
         f"Your token is your bot's identity and has been saved to {env_path}."
         " It is never printed again — keep the file, and do not commit or share it."
     )
-    print("Now play: python run.py")
+    print("Now play: python run.py play")
     return 0
 
 
@@ -164,11 +170,11 @@ def main(
     # attendees never have to read one.
     logging.getLogger("httpx").setLevel(logging.WARNING)
 
-    if not args.register and not config.token:
+    if args.command != "register" and not config.token:
         return _fail(f"No saved bot token in {env_path}. {REGISTER_HINT}")
 
     with ChessClient(config.server, config.token, transport=transport) as client:
-        if args.register:
+        if args.command == "register":
             return do_register(args, config, client, env_path)
         if choose_move is None:
             from bot import choose_move as choose_move  # noqa: PLC0415

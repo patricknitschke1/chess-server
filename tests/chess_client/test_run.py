@@ -18,7 +18,7 @@ def env_path(tmp_path):
 
 def register(env_path, transport, *extra):
     argv = [
-        "--register",
+        "register",
         "--name",
         "Sirius",
         "--owner",
@@ -60,7 +60,7 @@ def test_register_saves_the_token_and_never_prints_it(env_path, transport, capsy
 
 def test_register_without_a_join_code_says_where_to_get_one(env_path, transport, capsys):
     code = run.main(
-        ["--register", "--name", "Sirius", "--owner", "ada"],
+        ["register", "--name", "Sirius", "--owner", "ada"],
         transport=transport,
         env_path=env_path,
     )
@@ -73,7 +73,7 @@ def test_register_with_a_wrong_join_code_says_what_to_do(env_path, transport, ca
     code = register(env_path, transport)  # correct one first, to prove the seam
     assert code == 0
     code = run.main(
-        ["--register", "--name", "Vega", "--owner", "grace", "--join-code", "nope"],
+        ["register", "--name", "Vega", "--owner", "grace", "--join-code", "nope"],
         transport=transport,
         env_path=env_path,
     )
@@ -84,7 +84,7 @@ def test_register_with_a_wrong_join_code_says_what_to_do(env_path, transport, ca
 def test_register_with_a_taken_name_says_to_pick_another(env_path, transport, capsys):
     register(env_path, transport)
     code = run.main(
-        ["--register", "--name", "Sirius", "--owner", "grace", "--join-code", JOIN_CODE],
+        ["register", "--name", "Sirius", "--owner", "grace", "--join-code", JOIN_CODE],
         transport=transport,
         env_path=env_path,
     )
@@ -95,7 +95,7 @@ def test_register_with_a_taken_name_says_to_pick_another(env_path, transport, ca
 
 def test_register_rejects_an_email_as_owner_before_calling_the_server(env_path, capsys):
     code = run.main(
-        ["--register", "--name", "Sirius", "--owner", "ada@example.com",
+        ["register", "--name", "Sirius", "--owner", "ada@example.com",
          "--join-code", JOIN_CODE],
         transport=None,
         env_path=env_path,
@@ -122,10 +122,10 @@ def test_register_against_a_dead_server_says_to_check_the_address(env_path, caps
 
 
 def test_run_without_a_saved_token_tells_you_to_register(env_path, transport, capsys):
-    code = run.main([], transport=transport, env_path=env_path)
+    code = run.main(["play"], transport=transport, env_path=env_path)
     assert code == 2
     err = capsys.readouterr().err
-    assert "--register" in err
+    assert "register" in err
 
 
 def test_run_uses_the_saved_token_and_calls_your_bot(
@@ -142,7 +142,7 @@ def test_run_uses_the_saved_token_and_calls_your_bot(
         raise Stop
 
     with pytest.raises(Stop):
-        run.main([], transport=transport, env_path=env_path, choose_move=bot)
+        run.main(["play"], transport=transport, env_path=env_path, choose_move=bot)
     assert seen["called"]
     assert "tok-alice" not in capsys.readouterr().out
 
@@ -153,11 +153,19 @@ def test_run_with_an_unknown_token_says_to_register_again(env_path, transport, c
     def bot(board, clock):
         raise Stop
 
-    code = run.main([], transport=transport, env_path=env_path, choose_move=bot)
+    code = run.main(["play"], transport=transport, env_path=env_path, choose_move=bot)
     assert code == 2
     captured = capsys.readouterr()
     assert "s3cret-token" not in captured.out + captured.err
-    assert "--register" in captured.err
+    assert "register" in captured.err
+
+
+def test_bare_invocation_with_no_subcommand_fails_cleanly(env_path, capsys):
+    with pytest.raises(SystemExit) as exc_info:
+        run.main([], env_path=env_path)
+    assert exc_info.value.code != 0
+    err = capsys.readouterr().err.lower()
+    assert "register" in err and "play" in err
 
 
 # -- Configuration precedence ----------------------------------------------
@@ -165,11 +173,13 @@ def test_run_with_an_unknown_token_says_to_register_again(env_path, transport, c
 
 def test_server_flag_beats_the_saved_value(env_path):
     run.save_env(env_path, {"ARENA_SERVER": "http://saved"})
-    config = run.resolve(run.parse_args(["--server", "http://flag"]), run.load_env(env_path))
+    config = run.resolve(
+        run.parse_args(["play", "--server", "http://flag"]), run.load_env(env_path)
+    )
     assert config.server == "http://flag"
 
 
 def test_saved_server_is_used_when_no_flag_is_given(env_path):
     run.save_env(env_path, {"ARENA_SERVER": "http://saved"})
-    config = run.resolve(run.parse_args([]), run.load_env(env_path))
+    config = run.resolve(run.parse_args(["play"]), run.load_env(env_path))
     assert config.server == "http://saved"
