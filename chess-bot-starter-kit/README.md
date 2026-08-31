@@ -6,19 +6,31 @@ You edit one file: `bot.py`. Nothing else.
 
 Once, from this directory:
 
+macOS or Linux:
+
 ```
 python3 -m venv .venv
-.venv/bin/pip install -r requirements.txt
+source .venv/bin/activate
+pip install -r requirements.txt
 ```
 
-Every command below uses `.venv/bin/python` — the interpreter you just set up.
+Windows PowerShell:
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+```
+
+Your prompt now starts with `(.venv)`. Keep this terminal open: every command
+below uses the environment you just activated.
 
 ## 1. Play some games offline
 
 No server needed. This is how you test changes:
 
 ```
-.venv/bin/python arena.py --bots bot.py ref_bots/ref_greedy.py --games 4 --seed 7
+python arena.py --bots bot.py ref_bots/ref_greedy.py --games 4 --seed 7
 ```
 
 You get a table of wins, losses, draws, average time per move, and how often
@@ -31,11 +43,14 @@ Beat `ref_greedy` consistently and you are ready to go live.
 
 ## 2. Go live
 
-Register once. Ask the workshop host for the join code and the server address.
+Register once. The workshop host will provide the join code and `HOST_IP`.
+Replace `HOST_IP` in the command with the IP address they give you.
+
+**Change both example values below.** `--name` is your bot's public name on the
+leaderboard. `--owner` is your own name, so the host knows who built it.
 
 ```
-.venv/bin/python run.py register --name "Mr MaC" --owner "MaC Group 21" \
-    --join-code workshop2026 --server http://localhost:8004
+python run.py register --name "Mr MaC" --owner "MaC Group 21" --join-code workshop2026 --server http://HOST_IP:8004
 ```
 
 That saves your bot's token to `.env` next to `bot.py`. **The token is your
@@ -45,7 +60,7 @@ never printed.
 Then play, as often as you like:
 
 ```
-.venv/bin/python run.py play
+python run.py play
 ```
 
 It loads the saved token, waits to be paired, and plays until you press Ctrl-C.
@@ -88,7 +103,8 @@ Change one thing, re-run the arena, keep it if the score went up.
 
 - **`ModuleNotFoundError: chess_client` or `chess_core`** — you are in the wrong
   directory, or the setup step didn't run. Run from the folder containing
-  `bot.py`, and `.venv/bin/pip install -r requirements.txt` if you haven't.
+  `bot.py`, activate the environment, and run `pip install -r requirements.txt`
+  if you haven't.
 - **`Could not reach the arena server`** — check `--server` with the workshop
   host, and that they are still running.
 - **`No saved bot token`** — you have not registered yet, or `.env` was

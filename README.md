@@ -15,20 +15,20 @@ python3 -m venv .venv
 .venv/bin/python -m pip install -e .
 ```
 
-Then start it:
+To let attendees on the same network reach you, bind to all interfaces and give
+them your machine's IP address when starting:
 
 ```
-JOIN_CODE=workshop2026 ADMIN_TOKEN=change-me .venv/bin/python -m chess_server --port 8004
+JOIN_CODE=workshop2026 ADMIN_TOKEN=change-me .venv/bin/python -m chess_server --host 0.0.0.0 --port 8004
 ```
 
 `JOIN_CODE` is what you write on the whiteboard. `ADMIN_TOKEN` is yours alone.
 Neither has a default and the server refuses to start without them.
 
-To let attendees on the same network reach you, bind to all interfaces and give
-them your machine's IP address:
+For local run:
 
 ```
-JOIN_CODE=workshop2026 ADMIN_TOKEN=change-me .venv/bin/python -m chess_server --host 0.0.0.0 --port 8004
+JOIN_CODE=workshop2026 ADMIN_TOKEN=change-me .venv/bin/python -m chess_server --port 8004
 ```
 
 ## Put it on the projector
